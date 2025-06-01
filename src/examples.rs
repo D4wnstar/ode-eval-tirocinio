@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{rc::Rc, time::Instant};
 
 use charming::{
     Chart, HtmlRenderer, ImageFormat, ImageRenderer,
@@ -11,16 +11,16 @@ use crate::solvers::{Euler, IntegrationMethod, Midpoint, RungeKutta4, Solver, Sy
 /// Simple example of the exponential decay ODE ẋ = -x over a variety of initial values.
 /// Integration method can be chosen.
 pub fn exponential_decay(method: impl IntegrationMethod + Copy) {
-    let ode = |x: f64| -x;
+    let ode = Rc::new(|x: &[f64]| -x[0]);
     let t_start = 0.0;
     let t_end = 5.0;
     let stepsize = 0.1;
 
-    let system2 = System::new(ode, t_start, 2.0);
-    let system1 = System::new(ode, t_start, 1.0);
-    let system0 = System::new(ode, t_start, 0.0);
-    let systemm1 = System::new(ode, t_start, -1.0);
-    let systemm2 = System::new(ode, t_start, -2.0);
+    let system2 = System::new(t_start, &[2.0], &[ode.clone()]);
+    let system1 = System::new(t_start, &[1.0], &[ode.clone()]);
+    let system0 = System::new(t_start, &[0.0], &[ode.clone()]);
+    let systemm1 = System::new(t_start, &[-1.0], &[ode.clone()]);
+    let systemm2 = System::new(t_start, &[-2.0], &[ode]);
 
     let points2 = Solver::new(system2, t_end, stepsize, method).solve();
     let points1 = Solver::new(system1, t_end, stepsize, method).solve();
@@ -33,21 +33,21 @@ pub fn exponential_decay(method: impl IntegrationMethod + Copy) {
         .background_color("white")
         .x_axis(Axis::new().name("t").max(5.0))
         .y_axis(Axis::new().name("x"))
-        .series(Line::new().data(points2))
-        .series(Line::new().data(points1))
-        .series(Line::new().data(points0))
-        .series(Line::new().data(pointsm1))
-        .series(Line::new().data(pointsm2));
+        .series(Line::new().data(tuple_to_vec(&points2, 0)))
+        .series(Line::new().data(tuple_to_vec(&points1, 0)))
+        .series(Line::new().data(tuple_to_vec(&points0, 0)))
+        .series(Line::new().data(tuple_to_vec(&pointsm1, 0)))
+        .series(Line::new().data(tuple_to_vec(&pointsm2, 0)));
 
     save_chart(&chart, "exponential_decay", 1000, 800);
 }
 
 /// A comparison of several integration methods on the exponential decay ODE ẋ = -x.
 pub fn method_comparison() {
-    let ode = |x: f64| -x;
+    let ode = Rc::new(|x: &[f64]| -x[0]);
     let t_start = 0.0;
     let t_end = 5.0;
-    let system = System::new(ode, t_start, 2.0);
+    let system = System::new(t_start, &[2.0], &[ode]);
 
     // A low stepsize is recommended to make the the errors more visually obvious.
     let stepsize = 0.5;
@@ -95,11 +95,19 @@ pub fn method_comparison() {
     chart = chart
         .x_axis(Axis::new().name("t").max(5.0))
         .y_axis(Axis::new().name("x"))
-        .series(Line::new().data(points_euler).name("Euler"))
-        .series(Line::new().data(points_midpoint).name("Midpoint"))
         .series(
             Line::new()
-                .data(points_rk4)
+                .data(tuple_to_vec(&points_euler, 0))
+                .name("Euler"),
+        )
+        .series(
+            Line::new()
+                .data(tuple_to_vec(&points_midpoint, 0))
+                .name("Midpoint"),
+        )
+        .series(
+            Line::new()
+                .data(tuple_to_vec(&points_rk4, 0))
                 .name("Fourth-order Runge-Kutta"),
         )
         .series(
@@ -114,21 +122,21 @@ pub fn method_comparison() {
         .y_axis(Axis::new().name("x").grid_index(1))
         .series(
             Line::new()
-                .data(points_euler_dense)
+                .data(tuple_to_vec(&points_euler_dense, 0))
                 .name("Euler")
                 .x_axis_index(1)
                 .y_axis_index(1),
         )
         .series(
             Line::new()
-                .data(points_midpoint_dense)
+                .data(tuple_to_vec(&points_midpoint_dense, 0))
                 .name("Midpoint")
                 .x_axis_index(1)
                 .y_axis_index(1),
         )
         .series(
             Line::new()
-                .data(points_rk4_dense)
+                .data(tuple_to_vec(&points_rk4_dense, 0))
                 .name("Fourth-order Runge-Kutta")
                 .x_axis_index(1)
                 .y_axis_index(1),
@@ -144,6 +152,101 @@ pub fn method_comparison() {
     save_chart(&chart, "method_comparison", 2000, 800);
 }
 
+pub fn harmonic_oscillator(mass: f64, freq: f64, method: impl IntegrationMethod) {
+    let q_dot = Rc::new(move |x: &[f64]| x[1] / mass);
+    let p_dot = Rc::new(move |x: &[f64]| -mass * freq.powi(2) * x[0]);
+
+    let q_start = 0.0;
+    let p_start = 1.0;
+
+    let t_start = 0.0;
+    let t_end = 5.0;
+    let stepsize = 0.1;
+
+    let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
+    let points = Solver::new(system, t_end, stepsize, method).solve();
+
+    // Uncomment to see comparison with exact solution
+    // Commented because the solutions superimpose and you can't see the numerical one
+    // let q = move |t: f64| p_start / (mass * freq) * f64::sin(freq * t);
+    // let p = move |t: f64| p_start * f64::cos(freq * t);
+    // let exact_q_points: Vec<Vec<f64>> = (0..=50)
+    //     .map(|i| vec![stepsize * i as f64, q(stepsize * i as f64)])
+    //     .collect();
+    // let exact_p_points: Vec<Vec<f64>> = (0..=50)
+    //     .map(|i| vec![stepsize * i as f64, p(stepsize * i as f64)])
+    //     .collect();
+
+    let mut chart = Chart::new()
+        .title(Title::new().text(format!(
+            "Harmonic oscillator (q0 = {q_start}, p0 = {p_start}, mass = {mass}, frequency = {freq})"
+        )))
+        .background_color("white");
+
+    // Top plot
+    let kinetic_over_time: Vec<Vec<f64>> = points
+        .iter()
+        .map(|(t, qp)| vec![*t, qp[1].powi(2) / (2.0 * mass)])
+        .collect();
+    let potential_over_time: Vec<Vec<f64>> = points
+        .iter()
+        .map(|(t, qp)| vec![*t, 0.5 * mass * freq.powi(2) * qp[0].powi(2)])
+        .collect();
+    let energy_over_time: Vec<Vec<f64>> = kinetic_over_time
+        .iter()
+        .zip(&potential_over_time)
+        .map(|(kinetic, potential)| vec![kinetic[0], kinetic[1] + potential[1]])
+        .collect();
+
+    chart = chart
+        .grid(Grid::new().top("5%").height("42%"))
+        .x_axis(Axis::new().name("t"))
+        .y_axis(Axis::new())
+        .series(Line::new().data(tuple_to_vec(&points, 0)).name("q"))
+        .series(Line::new().data(tuple_to_vec(&points, 1)).name("p"))
+        // .series(Line::new().data(exact_q_points).name("q exact"))
+        // .series(Line::new().data(exact_p_points).name("p exact"))
+        .series(Line::new().data(kinetic_over_time).name("kinetic energy"))
+        .series(
+            Line::new()
+                .data(potential_over_time)
+                .name("potential energy"),
+        )
+        .series(Line::new().data(energy_over_time).name("total energy"));
+
+    // Bottom plot
+    let p_over_q: Vec<Vec<f64>> = points.iter().map(|(_, qp)| vec![qp[0], qp[1]]).collect();
+
+    chart = chart
+        .grid(Grid::new().bottom("5%").height("42%"))
+        .x_axis(Axis::new().name("q").grid_index(1).min(-1.2).max(1.2))
+        .y_axis(Axis::new().name("p").grid_index(1).min(-1.2).max(1.2))
+        .series(
+            Line::new()
+                .data(p_over_q)
+                .name("phase trajectory")
+                .x_axis_index(1)
+                .y_axis_index(1),
+        )
+        .legend(
+            Legend::new()
+                .data(vec![
+                    "q",
+                    "p",
+                    "q exact",
+                    "p exact",
+                    "kinetic energy",
+                    "potential energy",
+                    "total energy",
+                    "phase trajectory",
+                ])
+                .top("center"),
+        );
+
+    save_chart(&chart, "harmonic_oscillator", 1000, 1400);
+}
+
+/// Convenience function to save a `charming::Chart` to disk.
 fn save_chart(chart: &Chart, filename: &str, width: u32, height: u32) {
     let start = Instant::now();
     let mut renderer = HtmlRenderer::new("ODE Chart", width as u64, height as u64);
@@ -168,4 +271,9 @@ fn save_chart(chart: &Chart, filename: &str, width: u32, height: u32) {
         "Saving {filename} as PNG took {} ms",
         start.elapsed().as_millis(),
     );
+}
+
+/// Convenience function to unpack the tuple in the output of a `Solver` into a format that `charming` likes.
+fn tuple_to_vec(vec: &Vec<(f64, Vec<f64>)>, arg: usize) -> Vec<Vec<f64>> {
+    vec.iter().map(|(t, x)| vec![*t, x[arg]]).collect()
 }
