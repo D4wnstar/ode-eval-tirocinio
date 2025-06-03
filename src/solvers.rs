@@ -4,11 +4,10 @@
 use std::rc::Rc;
 
 use crate::{
-    methods::{DoubleIntegrationMethod, IntegrationMethod},
+    methods::{AdaptiveIntegrationMethod, IntegrationMethod},
     schedulers::StepsizeScheduler,
+    utils::ScalarField,
 };
-
-pub type ScalarField = dyn Fn(&[f64]) -> f64;
 
 /// An autonomous system of first-order ODEs, alongside their starting conditions
 /// and the starting independent variable.
@@ -53,7 +52,7 @@ pub struct Solver<M: IntegrationMethod> {
 }
 
 impl<M: IntegrationMethod> Solver<M> {
-    pub fn new(system: System, stepsize: f64, method: M) -> Self {
+    pub fn new(system: System, method: M, stepsize: f64) -> Self {
         Self {
             system,
             stepsize,
@@ -86,21 +85,22 @@ impl<M: IntegrationMethod> Solver<M> {
     }
 }
 
+/// An ODE solver with adaptive stepsize.  It will evaluate the `system` with a variable stepsize
+/// using any given `AdaptiveIntegrationMethod` and `StepsizeScheduler`.
 pub struct AdaptiveSolver<M, S>
 where
-    M: DoubleIntegrationMethod,
+    M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
 {
     system: System,
     method: M,
     scheduler: S,
-    min_stepsize: f64,
     tolerances: Tolerances,
 }
 
 impl<M, S> AdaptiveSolver<M, S>
 where
-    M: DoubleIntegrationMethod,
+    M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
 {
     const MAX_STEPS: u32 = 50_000;
@@ -108,34 +108,34 @@ where
 
 impl<M, S> AdaptiveSolver<M, S>
 where
-    M: DoubleIntegrationMethod,
+    M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
 {
-    pub fn new(
-        system: System,
-        method: M,
-        scheduler: S,
-        min_stepsize: f64,
-        tolerances: Tolerances,
-    ) -> Self {
+    pub fn new(system: System, method: M, scheduler: S, tolerances: Tolerances) -> Self {
         AdaptiveSolver {
             system,
             method,
             scheduler,
-            min_stepsize,
             tolerances,
         }
     }
 
     pub fn solve(&self, t_end: f64, starting_stepsize: f64) -> Vec<(f64, Vec<f64>)> {
         let mut output = vec![(self.system.t_start, self.system.x_start.clone())];
-        let mut t_curr = self.system.t_start;
+        let mut t_curr = self.system.t_start + starting_stepsize;
         let mut x_curr = self.system.x_start.clone();
         let mut stepsize = starting_stepsize;
         let mut step_count = 1;
+        let mut end = false;
 
-        // TODO: Make sure last step is exactly at t_end
-        while t_curr < t_end || step_count > Self::MAX_STEPS {
+        while step_count < Self::MAX_STEPS {
+            // Make sure last step is exactly at t_end to avoid an empty interval at the end
+            if t_curr > t_end {
+                stepsize -= (t_curr - t_end).abs();
+                t_curr = t_end;
+                end = true;
+            }
+
             step_count += 1;
             let result = self
                 .method
@@ -146,32 +146,25 @@ where
                 .error(&x_curr, &result.delta, &self.tolerances);
             let accepted = self.scheduler.accept(error);
 
-            println!("t_curr={t_curr}; x_curr={x_curr:?}; stepsize={stepsize}; error={error}");
-
             if accepted {
                 // If the step is accepted, update x and stepsize and save the result
-                stepsize = self.scheduler.next(stepsize, error);
-                println!("Accepted step. New stepsize={stepsize}; result={result:?}");
-                t_curr += stepsize;
-                x_curr = result.x_good;
-
-                if stepsize < self.min_stepsize {
-                    panic!(
-                        "Stepsize went below minimum ({} < {})",
-                        stepsize, self.min_stepsize
-                    );
-                }
-
+                x_curr = result.x_good.clone();
                 output.push((t_curr, x_curr.clone()));
+
+                stepsize = self.scheduler.next(stepsize, error);
+                t_curr += stepsize;
             } else {
                 // If the step is rejected, update the stepsize but do not advance the
                 // step counter. This forces the current step to be redone until it is
                 // within accepted error margins
                 let new_stepsize = self.scheduler.next(stepsize, error);
-                println!("Rejected step. New stepsize={new_stepsize}");
 
                 // Stepsize must only ever decrease on reject
                 stepsize = new_stepsize.min(stepsize);
+            }
+
+            if end {
+                break;
             }
         }
 

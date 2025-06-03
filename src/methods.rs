@@ -1,22 +1,19 @@
 use std::rc::Rc;
 
-use crate::solvers::ScalarField;
+use crate::utils::{ScalarField, VecOperations};
 
-/// Common trait between all numerical integration methods. The `next` function calculates the next
-/// step from the current step.
+/// Trait for all non-adaptive numerical integration methods.
 pub trait IntegrationMethod {
-    /// Calculate the next step from the current step `x` given the derivative vector field `f`.
+    /// Predict the next point from the current one `x`, using the functions `f` at a
+    /// step `stepsize`.
     fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> Vec<f64>;
-
-    /// Rust does not support vector operations, so this function is a helper to run a function `map`
-    /// over `n` components.
-    fn vec(&self, n: usize, map: impl Fn(usize) -> f64) -> Vec<f64> {
-        (0..n).map(|i| map(i)).collect()
-    }
 }
 
+/// The traditional Euler method.
 #[derive(Default, Clone, Copy)]
 pub struct Euler {}
+
+impl VecOperations for Euler {}
 
 impl IntegrationMethod for Euler {
     fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> Vec<f64> {
@@ -24,8 +21,13 @@ impl IntegrationMethod for Euler {
     }
 }
 
+/// The improved Euler method, using the average of the derivatives at the start
+/// and at the point guessed by the usual Euler method. Technically a second-order
+/// Runge-Kutta method.
 #[derive(Default, Clone, Copy)]
 pub struct Midpoint {}
+
+impl VecOperations for Midpoint {}
 
 impl IntegrationMethod for Midpoint {
     fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> Vec<f64> {
@@ -37,8 +39,11 @@ impl IntegrationMethod for Midpoint {
     }
 }
 
+/// The classic fourth-order Runge-Kutta method.
 #[derive(Default, Clone, Copy)]
 pub struct RungeKutta4 {}
+
+impl VecOperations for RungeKutta4 {}
 
 impl IntegrationMethod for RungeKutta4 {
     fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> Vec<f64> {
@@ -61,23 +66,23 @@ impl IntegrationMethod for RungeKutta4 {
     }
 }
 
-pub trait DoubleIntegrationMethod {
-    fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> DoubleIntegrationStep;
-
-    /// Rust does not support vector operations, so this function is a helper to run a function `map`
-    /// over `n` components.
-    fn vec(&self, n: usize, map: impl Fn(usize) -> f64) -> Vec<f64> {
-        (0..n).map(|i| map(i)).collect()
-    }
+/// Trait for integration methods that return both an estimate for the next point and
+/// an estimate of the level of imprecision of the point. Meant to be used alongside
+/// an adaptive `StepsizeScheduler`.
+pub trait AdaptiveIntegrationMethod {
+    /// Predict the next point from the current one `x`, using the functions `f` at a
+    /// step `stepsize`.
+    fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> AdaptiveIntegrationStep;
 }
 
 #[derive(Debug, Clone)]
-pub struct DoubleIntegrationStep {
+pub struct AdaptiveIntegrationStep {
     pub x_good: Vec<f64>,
     pub x_bad: Vec<f64>,
     pub delta: Vec<f64>,
 }
 
+/// The Dormand-Prince 5(4) embedded Runge-Kutta method.
 #[derive(Default, Clone, Copy)]
 pub struct DormandPrince54 {}
 
@@ -141,8 +146,10 @@ impl DormandPrince54 {
     const C: [f64; 7] = [0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
 }
 
-impl DoubleIntegrationMethod for DormandPrince54 {
-    fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> DoubleIntegrationStep {
+impl VecOperations for DormandPrince54 {}
+
+impl AdaptiveIntegrationMethod for DormandPrince54 {
+    fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> AdaptiveIntegrationStep {
         let n = x.len();
         let a = &Self::A;
         let b = &Self::B;
@@ -210,7 +217,7 @@ impl DoubleIntegrationMethod for DormandPrince54 {
         // Find the difference between the estimations
         let delta = self.vec(n, |i| x_order5[i] - x_order4[i]);
 
-        return DoubleIntegrationStep {
+        return AdaptiveIntegrationStep {
             x_good: x_order5,
             x_bad: x_order4,
             delta,
