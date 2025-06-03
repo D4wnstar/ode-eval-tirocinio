@@ -4,7 +4,7 @@ use examples::{
 use methods::{DormandPrince54, RungeKutta4};
 use schedulers::DeltaScheduler;
 
-use crate::examples::harmonic_oscillator_adaptive;
+use crate::examples::{harmonic_oscillator_adaptive, simple_pendulum_adaptive};
 
 pub mod examples;
 pub mod methods;
@@ -24,6 +24,13 @@ fn main() {
         1.0,
         2.0,
         DormandPrince54::default(),
-        DeltaScheduler::with_dimension(1),
+        DeltaScheduler::with_dimension(2),
+    );
+    simple_pendulum_adaptive(
+        1.0,
+        9.8,
+        2.0,
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(2),
     );
 }

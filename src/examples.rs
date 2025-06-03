@@ -332,6 +332,92 @@ fn process_harmonic_oscillator(
         );
 }
 
+pub fn simple_pendulum_adaptive(
+    m: f64,
+    g: f64,
+    l: f64,
+    method: impl AdaptiveIntegrationMethod,
+    scheduler: impl StepsizeScheduler,
+) {
+    // x = (theta, p_theta)
+    let theta_dot = Rc::new(move |x: &[f64]| x[1] / (m * l.powi(2)));
+    let p_dot = Rc::new(move |x: &[f64]| -m * g * l * f64::sin(x[0]));
+
+    let theta_start = 0.0;
+    let p_start = 1.0;
+
+    let t_start = 0.0;
+    let t_end = 5.0;
+    let guess_stepsize = 0.1;
+    let tolerances = Tolerances::new(1e-7, 1e-7);
+
+    let system = System::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
+    let points =
+        AdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
+
+    let mut chart = Chart::new()
+        .title(Title::new().text(format!("Simple pendulum (theta0 = {theta_start}, p0 = {p_start}, mass = {m}, length = {l}, g = {g})")))
+        .background_color("white");
+
+    // Top plot
+    let kinetic_over_time: Vec<Vec<f64>> = points
+        .iter()
+        .map(|(t, x)| vec![*t, x[1].powi(2) / (2.0 * m * l.powi(2))])
+        .collect();
+    let potential_over_time: Vec<Vec<f64>> = points
+        .iter()
+        .map(|(t, x)| vec![*t, m * g * l * (1.0 - f64::cos(x[0]))])
+        .collect();
+    let energy_over_time: Vec<Vec<f64>> = kinetic_over_time
+        .iter()
+        .zip(&potential_over_time)
+        .map(|(kinetic, potential)| vec![kinetic[0], kinetic[1] + potential[1]])
+        .collect();
+
+    chart = chart
+        .grid(Grid::new().top("5%").height("42%"))
+        .x_axis(Axis::new().name("t"))
+        .y_axis(Axis::new())
+        .series(Line::new().data(tuple_to_vec(&points, 0)).name("theta"))
+        .series(Line::new().data(tuple_to_vec(&points, 1)).name("p"))
+        .series(Line::new().data(kinetic_over_time).name("kinetic energy"))
+        .series(
+            Line::new()
+                .data(potential_over_time)
+                .name("potential energy"),
+        )
+        .series(Line::new().data(energy_over_time).name("total energy"));
+
+    // Bottom plot
+    let p_over_theta: Vec<Vec<f64>> = points.iter().map(|(_, x)| vec![x[0], x[1]]).collect();
+
+    chart = chart
+        .grid(Grid::new().bottom("5%").height("42%"))
+        .x_axis(Axis::new().name("theta").grid_index(1).min(-1.2).max(1.2))
+        .y_axis(Axis::new().name("p").grid_index(1).min(-1.2).max(1.2))
+        .series(
+            Line::new()
+                .data(p_over_theta)
+                .name("phase trajectory")
+                .x_axis_index(1)
+                .y_axis_index(1),
+        )
+        .legend(
+            Legend::new()
+                .data(vec![
+                    "theta",
+                    "p",
+                    "kinetic energy",
+                    "potential energy",
+                    "total energy",
+                    "phase trajectory",
+                ])
+                .top("center"),
+        );
+
+    save_chart(&chart, "simple_pendulum_adaptive", 1000, 1400);
+}
+
 /// Convenience function to save a `charming::Chart` to disk.
 fn save_chart(chart: &Chart, filename: &str, width: u32, height: u32) {
     let start = Instant::now();
