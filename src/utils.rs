@@ -19,3 +19,19 @@ pub trait VecOperations {
 
 /// A function from R^N to R.
 pub type ScalarField = dyn Fn(&[f64]) -> f64;
+
+/// Tolerances for solvers.
+#[derive(Debug, Clone, Copy)]
+pub struct Tolerances {
+    pub absolute: f64,
+    pub relative: f64,
+}
+
+impl Tolerances {
+    pub fn new(atol: f64, rtol: f64) -> Self {
+        Self {
+            absolute: atol,
+            relative: rtol,
+        }
+    }
+}

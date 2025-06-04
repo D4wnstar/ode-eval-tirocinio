@@ -73,6 +73,7 @@ pub trait AdaptiveIntegrationMethod {
     /// Predict the next point from the current one `x`, using the functions `f` at a
     /// step `stepsize`.
     fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> AdaptiveIntegrationStep;
+    fn interpolate(&self, t: f64, t_curr: f64, stepsize: f64, coeffs: &[Vec<f64>]) -> Vec<f64>;
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +81,7 @@ pub struct AdaptiveIntegrationStep {
     pub x_good: Vec<f64>,
     pub x_bad: Vec<f64>,
     pub delta: Vec<f64>,
+    pub interp_coeffs: Vec<Vec<f64>>,
 }
 
 /// The Dormand-Prince 5(4) embedded Runge-Kutta method.
@@ -144,6 +146,17 @@ impl DormandPrince54 {
     // Nodes (c_i) if non-autonomous
     #[allow(unused)]
     const C: [f64; 7] = [0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
+
+    // Interpolation coefficients (d_i)
+    const D: [f64; 7] = [
+        -12715105075.0 / 11282082432.0,
+        0.0,
+        87487479700.0 / 32700410799.0,
+        -10690763975.0 / 1880347072.0,
+        701980252875.0 / 199316789632.0,
+        -1453857185.0 / 822651844.0,
+        69997945.0 / 29380423.0,
+    ];
 }
 
 impl VecOperations for DormandPrince54 {}
@@ -154,9 +167,11 @@ impl AdaptiveIntegrationMethod for DormandPrince54 {
         let a = &Self::A;
         let b = &Self::B;
         let b_star = &Self::B_STAR;
+        let d = &Self::D;
 
         // Calculate the common parameters
-        let k1 = self.vec(n, |i| f[i](x) * stepsize);
+        let deriv = self.vec(n, |i| f[i](x));
+        let k1 = self.vec(n, |i| deriv[i] * stepsize);
         let trial1 = self.vec(n, |i| x[i] + a[1][0] * k1[i]);
 
         let k2 = self.vec(n, |i| f[i](&trial1) * stepsize);
@@ -203,6 +218,7 @@ impl AdaptiveIntegrationMethod for DormandPrince54 {
                 + b[5] * k6[i]
                 + b[6] * k7[i]
         });
+        let deriv_next = self.vec(n, |i| f[i](&x_order5));
 
         let x_order4 = self.vec(n, |i| {
             x[i] + b_star[0] * k1[i]
@@ -217,10 +233,43 @@ impl AdaptiveIntegrationMethod for DormandPrince54 {
         // Find the difference between the estimations
         let delta = self.vec(n, |i| x_order5[i] - x_order4[i]);
 
+        // Calculate the interpolation coefficients
+        let r1 = x.to_vec();
+        let r2 = self.vec(n, |i| x_order5[i] - x[i]);
+        let r3 = self.vec(n, |i| deriv[i] * stepsize - r2[i]);
+        let r4 = self.vec(n, |i| {
+            2.0 * r2[i] - r3[i] - (deriv[i] + deriv_next[i]) * stepsize
+        });
+        let r5 = self.vec(n, |i| {
+            (d[0] * k1[i]
+                + d[2] * k3[i]
+                + d[3] * k4[i]
+                + d[4] * k5[i]
+                + d[5] * k6[i]
+                + d[6] * deriv_next[i])
+                * stepsize
+        });
+
         return AdaptiveIntegrationStep {
             x_good: x_order5,
             x_bad: x_order4,
             delta,
+            interp_coeffs: vec![r1, r2, r3, r4, r5],
         };
+    }
+
+    fn interpolate(&self, t: f64, t_curr: f64, stepsize: f64, r: &[Vec<f64>]) -> Vec<f64> {
+        let n = r[0].len();
+        // Normalize t to be between 0 and 1
+        let s = (t - t_curr) / stepsize;
+        let s_sq = s.powi(2);
+        let one_minus_s = 1.0 - s;
+        return self.vec(n, |i| {
+            r[0][i]
+                + s * r[1][i]
+                + s * one_minus_s * r[2][i]
+                + s_sq * one_minus_s * r[3][i]
+                + s_sq * one_minus_s.powi(2) * r[4][i]
+        });
     }
 }

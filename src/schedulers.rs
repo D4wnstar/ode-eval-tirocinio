@@ -1,4 +1,4 @@
-use crate::{solvers::Tolerances, utils::VecOperations};
+use crate::utils::{Tolerances, VecOperations};
 
 /// Trait for stepsize schedulers. A scheduler must be able to convert an error estimate
 /// into a more tractable form, accept or reject a step and estimate the size of the next

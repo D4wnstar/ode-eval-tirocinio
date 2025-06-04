@@ -3,14 +3,17 @@ use std::{rc::Rc, time::Instant};
 use charming::{
     Chart, HtmlRenderer, ImageFormat, ImageRenderer,
     component::{Axis, Grid, Legend, Title},
-    series::Line,
+    series::{Line, Scatter},
 };
 
-use crate::solvers::{Solver, System};
 use crate::{
     methods::{AdaptiveIntegrationMethod, Euler, IntegrationMethod, Midpoint, RungeKutta4},
     schedulers::StepsizeScheduler,
-    solvers::{AdaptiveSolver, Tolerances},
+    solvers::AdaptiveSolver,
+};
+use crate::{
+    solvers::{Solver, System},
+    utils::Tolerances,
 };
 
 /// Simple example of the exponential decay ODE ẋ = -x over a variety of initial values.
@@ -36,7 +39,7 @@ pub fn exponential_decay(method: impl IntegrationMethod + Copy) {
     let chart = Chart::new()
         .title(Title::new().text("ẋ = -x for different initial values"))
         .background_color("white")
-        .x_axis(Axis::new().name("t").max(5.0))
+        .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new().name("x"))
         .series(Line::new().data(tuple_to_vec(&points2, 0)))
         .series(Line::new().data(tuple_to_vec(&points1, 0)))
@@ -66,21 +69,26 @@ pub fn exponential_decay_adaptive(
     let systemm1 = System::new(t_start, &[-1.0], &[ode.clone()]);
     let systemm2 = System::new(t_start, &[-2.0], &[ode]);
 
-    let points2 =
-        AdaptiveSolver::new(system2, method, scheduler, tolerances).solve(t_end, guess_stepsize);
-    let points1 =
-        AdaptiveSolver::new(system1, method, scheduler, tolerances).solve(t_end, guess_stepsize);
-    let points0 =
-        AdaptiveSolver::new(system0, method, scheduler, tolerances).solve(t_end, guess_stepsize);
-    let pointsm1 =
-        AdaptiveSolver::new(systemm1, method, scheduler, tolerances).solve(t_end, guess_stepsize);
-    let pointsm2 =
-        AdaptiveSolver::new(systemm2, method, scheduler, tolerances).solve(t_end, guess_stepsize);
+    let points2 = AdaptiveSolver::new(system2, method, scheduler, tolerances)
+        .solve(t_end, guess_stepsize)
+        .points;
+    let points1 = AdaptiveSolver::new(system1, method, scheduler, tolerances)
+        .solve(t_end, guess_stepsize)
+        .points;
+    let points0 = AdaptiveSolver::new(system0, method, scheduler, tolerances)
+        .solve(t_end, guess_stepsize)
+        .points;
+    let pointsm1 = AdaptiveSolver::new(systemm1, method, scheduler, tolerances)
+        .solve(t_end, guess_stepsize)
+        .points;
+    let pointsm2 = AdaptiveSolver::new(systemm2, method, scheduler, tolerances)
+        .solve(t_end, guess_stepsize)
+        .points;
 
     let chart = Chart::new()
         .title(Title::new().text("ẋ = -x for different initial values (adaptive stepsize)"))
         .background_color("white")
-        .x_axis(Axis::new().name("t").max(5.0))
+        .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new().name("x"))
         .series(Line::new().data(tuple_to_vec(&points2, 0)))
         .series(Line::new().data(tuple_to_vec(&points1, 0)))
@@ -202,6 +210,7 @@ pub fn method_comparison() {
     save_chart(&chart, "method_comparison", 2000, 800);
 }
 
+/// A simple one-dimensional harmonic oscillator with the given mass and angular frequency.
 pub fn harmonic_oscillator(mass: f64, freq: f64, method: impl IntegrationMethod) {
     // x = (q, p), so x[0] = q and x[1] = p
     let q_dot = Rc::new(move |x: &[f64]| x[1] / mass);
@@ -221,6 +230,8 @@ pub fn harmonic_oscillator(mass: f64, freq: f64, method: impl IntegrationMethod)
     save_chart(&chart, "harmonic_oscillator", 1000, 1400);
 }
 
+/// A simple one-dimensional harmonic oscillator with the given mass and angular frequency.
+/// Uses an adaptive stepsize.
 pub fn harmonic_oscillator_adaptive(
     mass: f64,
     freq: f64,
@@ -240,13 +251,61 @@ pub fn harmonic_oscillator_adaptive(
     let tolerances = Tolerances::new(1e-6, 1e-6);
 
     let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
-    let points =
+    let solution =
         AdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
 
-    let chart = process_harmonic_oscillator(points, q_start, p_start, mass, freq);
+    let chart = process_harmonic_oscillator(solution.points, q_start, p_start, mass, freq);
     save_chart(&chart, "harmonic_oscillator_adaptive", 1000, 1400);
 }
 
+/// A simple one-dimensional harmonic oscillator with the given mass and angular frequency.
+/// Uses an adaptive stepsize and will interpolate at the given points.
+pub fn harmonic_oscillator_interpolation(
+    mass: f64,
+    freq: f64,
+    method: impl AdaptiveIntegrationMethod,
+    scheduler: impl StepsizeScheduler,
+) {
+    // x = (q, p), so x[0] = q and x[1] = p
+    let q_dot = Rc::new(move |x: &[f64]| x[1] / mass);
+    let p_dot = Rc::new(move |x: &[f64]| -mass * freq.powi(2) * x[0]);
+
+    let q_start = 0.0;
+    let p_start = 1.0;
+
+    let t_start = 0.0;
+    let t_end = 5.0;
+    let guess_stepsize = 0.1;
+    let tolerances = Tolerances::new(1e-6, 1e-6);
+
+    // Interpolate every 0.1 step of t
+    let n_to_interp = f64::floor((t_end - t_start) / 0.1) as usize + 1;
+    let to_interpolate = [0.1]
+        .repeat(n_to_interp)
+        .iter()
+        .enumerate()
+        .map(|(i, t)| i as f64 * t)
+        .collect();
+
+    let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
+    let solution = AdaptiveSolver::new(system, method, scheduler, tolerances)
+        .at_points(to_interpolate)
+        .solve(t_end, guess_stepsize);
+
+    let chart = Chart::new()
+        .title(Title::new().text(format!("Harmonic oscillator (q0 = {q_start}, p0 = {p_start}, mass = {mass}, frequency = {freq})")))
+        .background_color("white")
+        .x_axis(Axis::new().name("t"))
+        .y_axis(Axis::new().name("q"))
+        .series(Scatter::new().data(tuple_to_vec(&solution.points, 0)).name("q solved"))
+        .series(Line::new().data(tuple_to_vec(&solution.interp_points.unwrap(), 0)).name("q interpolated"))
+        .legend(
+            Legend::new().data(vec!["q solved", "q interpolated"]).top("bottom")
+        );
+    save_chart(&chart, "harmonic_oscillator_interpolated", 1000, 800);
+}
+
+/// Convenience function to process harmonic oscillator simulations.
 fn process_harmonic_oscillator(
     points: Vec<(f64, Vec<f64>)>,
     q_start: f64,
@@ -332,6 +391,8 @@ fn process_harmonic_oscillator(
         );
 }
 
+/// A simple pendulum with the given mass `m`, gravitational acceleration `g` and length `l`.
+/// Will use an adaptive stepsize. This is a proper pendulum, without small swing approximation.
 pub fn simple_pendulum_adaptive(
     m: f64,
     g: f64,
@@ -352,8 +413,9 @@ pub fn simple_pendulum_adaptive(
     let tolerances = Tolerances::new(1e-7, 1e-7);
 
     let system = System::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
-    let points =
+    let solution =
         AdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
+    let points = solution.points;
 
     let mut chart = Chart::new()
         .title(Title::new().text(format!("Simple pendulum (theta0 = {theta_start}, p0 = {p_start}, mass = {m}, length = {l}, g = {g})")))
@@ -416,6 +478,58 @@ pub fn simple_pendulum_adaptive(
         );
 
     save_chart(&chart, "simple_pendulum_adaptive", 1000, 1400);
+}
+
+/// A simple pendulum with the given mass `m`, gravitational acceleration `g` and length `l`.
+/// Will use an adaptive stepsize. The plot compares the simulated solution with the analytic
+/// solution in the small wings approximation of sin(x) ~= x.
+pub fn simple_pendulum_against_small_swings(
+    m: f64,
+    g: f64,
+    l: f64,
+    method: impl AdaptiveIntegrationMethod,
+    scheduler: impl StepsizeScheduler,
+) {
+    // x = (theta, p_theta)
+    let theta_dot = Rc::new(move |x: &[f64]| x[1] / (m * l.powi(2)));
+    let p_dot = Rc::new(move |x: &[f64]| -m * g * l * f64::sin(x[0]));
+
+    let theta_start = 0.0;
+    let p_start = 1.0;
+
+    let t_start = 0.0;
+    let t_end = 5.0;
+    let guess_stepsize = 0.1;
+    let tolerances = Tolerances::new(1e-7, 1e-7);
+
+    let system = System::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
+    let points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+        .solve(t_end, guess_stepsize)
+        .points;
+
+    // Exact solution in small swings is a harmonic oscillator with freq = sqrt(g / l)
+    let omega = f64::sqrt(g / l);
+    let x = |t: f64, q0: f64, p0: f64| {
+        q0 * f64::cos(omega * t) + p0 / (omega * m) * f64::sin(omega * t)
+    };
+    let points_exact: Vec<Vec<f64>> = (0..=50)
+        .map(|i| {
+            let t = i as f64 * 0.1;
+            vec![t, x(t, theta_start, p_start)]
+        })
+        .collect();
+
+    let chart = Chart::new()
+        .title(Title::new().text(format!("Simple pendulum (theta0 = {theta_start}, p0 = {p_start}, mass = {m}, length = {l}, g = {g})")))
+        .background_color("white")
+        .x_axis(Axis::new().name("t"))
+        .y_axis(Axis::new())
+        .series(Line::new().data(tuple_to_vec(&points, 0)).name("theta"))
+        .series(Line::new().data(tuple_to_vec(&points, 1)).name("p"))
+        .series(Line::new().data(points_exact).name("theta exact (small swings)"))
+        .legend(Legend::new().data(vec!["theta", "p", "theta exact (small swings)"]).top("bottom"));
+
+    save_chart(&chart, "simple_pendulum_against_small_swings", 1000, 800);
 }
 
 /// Convenience function to save a `charming::Chart` to disk.

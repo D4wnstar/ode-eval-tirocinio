@@ -6,7 +6,7 @@ use std::rc::Rc;
 use crate::{
     methods::{AdaptiveIntegrationMethod, IntegrationMethod},
     schedulers::StepsizeScheduler,
-    utils::ScalarField,
+    utils::{ScalarField, Tolerances},
 };
 
 /// An autonomous system of first-order ODEs, alongside their starting conditions
@@ -96,6 +96,7 @@ where
     method: M,
     scheduler: S,
     tolerances: Tolerances,
+    to_interpolate: Option<Vec<f64>>,
 }
 
 impl<M, S> AdaptiveSolver<M, S>
@@ -117,43 +118,82 @@ where
             method,
             scheduler,
             tolerances,
+            to_interpolate: None,
         }
     }
 
-    pub fn solve(&self, t_end: f64, starting_stepsize: f64) -> Vec<(f64, Vec<f64>)> {
-        let mut output = vec![(self.system.t_start, self.system.x_start.clone())];
-        let mut t_curr = self.system.t_start + starting_stepsize;
+    /// Also interpolate at the given points, as a vector of values of the independent variable.
+    /// **The vector must be monotonically increasing, so sort it before use**.
+    pub fn at_points(mut self, to_interpolate: Vec<f64>) -> Self {
+        self.to_interpolate = Some(to_interpolate);
+        self
+    }
+
+    pub fn solve(&self, t_end: f64, starting_stepsize: f64) -> OdeSolution {
+        let mut points = vec![(self.system.t_start, self.system.x_start.clone())];
+        let mut interp_points = if self.to_interpolate.is_some() {
+            Some(vec![])
+        } else {
+            None
+        };
+        let mut interp_index = 0;
+        let mut accepted_steps = 0;
+        let mut rejected_steps = 0;
+
+        let mut t_next = self.system.t_start + starting_stepsize;
         let mut x_curr = self.system.x_start.clone();
         let mut stepsize = starting_stepsize;
         let mut step_count = 1;
         let mut end = false;
 
         while step_count < Self::MAX_STEPS {
+            step_count += 1;
+
             // Make sure last step is exactly at t_end to avoid an empty interval at the end
-            if t_curr > t_end {
-                stepsize -= (t_curr - t_end).abs();
-                t_curr = t_end;
+            if t_next > t_end {
+                stepsize -= (t_next - t_end).abs();
+                t_next = t_end;
                 end = true;
             }
 
-            step_count += 1;
             let result = self
                 .method
                 .next(&x_curr, &self.system.derivatives, stepsize);
-
             let error = self
                 .scheduler
                 .error(&x_curr, &result.delta, &self.tolerances);
             let accepted = self.scheduler.accept(error);
 
             if accepted {
+                accepted_steps += 1;
                 // If the step is accepted, update x and stepsize and save the result
-                x_curr = result.x_good.clone();
-                output.push((t_curr, x_curr.clone()));
+                let x_next = result.x_good;
+                points.push((t_next, x_next.clone()));
+
+                // If the user requires specific points, interpolate the ones found in
+                // the current step
+                if let Some(to_interp) = &self.to_interpolate {
+                    while interp_index <= to_interp.len() - 1
+                        && to_interp[interp_index] >= t_next - stepsize
+                        && to_interp[interp_index] <= t_next
+                    {
+                        let t_interp = to_interp[interp_index];
+                        let x_interp = self.method.interpolate(
+                            t_interp,
+                            t_next - stepsize,
+                            stepsize,
+                            &result.interp_coeffs,
+                        );
+                        interp_points.as_mut().unwrap().push((t_interp, x_interp));
+                        interp_index += 1;
+                    }
+                }
 
                 stepsize = self.scheduler.next(stepsize, error);
-                t_curr += stepsize;
+                t_next += stepsize;
+                x_curr = x_next;
             } else {
+                rejected_steps += 1;
                 // If the step is rejected, update the stepsize but do not advance the
                 // step counter. This forces the current step to be redone until it is
                 // within accepted error margins
@@ -168,21 +208,20 @@ where
             }
         }
 
-        return output;
+        return OdeSolution {
+            points,
+            interp_points,
+            accepted_steps,
+            rejected_steps,
+        };
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Tolerances {
-    pub absolute: f64,
-    pub relative: f64,
-}
-
-impl Tolerances {
-    pub fn new(atol: f64, rtol: f64) -> Self {
-        Self {
-            absolute: atol,
-            relative: rtol,
-        }
-    }
+/// The solution to an ODE problem, including optional interpolations and some metadata.
+#[derive(Debug, Clone)]
+pub struct OdeSolution {
+    pub points: Vec<(f64, Vec<f64>)>,
+    pub interp_points: Option<Vec<(f64, Vec<f64>)>>,
+    pub accepted_steps: u32,
+    pub rejected_steps: u32,
 }
