@@ -6,7 +6,7 @@ use schedulers::DeltaScheduler;
 
 use crate::examples::{
     harmonic_oscillator_adaptive, harmonic_oscillator_interpolation, simple_pendulum_adaptive,
-    simple_pendulum_against_small_swings,
+    simple_pendulum_against_small_swings, simple_pendulum_several_initial_values,
 };
 
 pub mod examples;
@@ -43,6 +43,13 @@ fn main() {
         DeltaScheduler::with_dimension(2),
     );
     simple_pendulum_against_small_swings(
+        1.0,
+        9.8,
+        1.0,
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(2),
+    );
+    simple_pendulum_several_initial_values(
         1.0,
         9.8,
         1.0,

@@ -170,34 +170,34 @@ impl AdaptiveIntegrationMethod for DormandPrince54 {
         let d = &Self::D;
 
         // Calculate the common parameters
-        let deriv = self.vec(n, |i| f[i](x));
-        let k1 = self.vec(n, |i| deriv[i] * stepsize);
-        let trial1 = self.vec(n, |i| x[i] + a[1][0] * k1[i]);
+        let k1 = self.vec(n, |i| f[i](x) * stepsize);
 
-        let k2 = self.vec(n, |i| f[i](&trial1) * stepsize);
-        let trial2 = self.vec(n, |i| x[i] + a[2][0] * k1[i] + a[2][1] * k2[i]);
+        let trial2 = self.vec(n, |i| x[i] + a[1][0] * k1[i]);
+        let k2 = self.vec(n, |i| f[i](&trial2) * stepsize);
 
-        let k3 = self.vec(n, |i| f[i](&trial2) * stepsize);
-        let trial3 = self.vec(n, |i| {
+        let trial3 = self.vec(n, |i| x[i] + a[2][0] * k1[i] + a[2][1] * k2[i]);
+        let k3 = self.vec(n, |i| f[i](&trial3) * stepsize);
+
+        let trial4 = self.vec(n, |i| {
             x[i] + a[3][0] * k1[i] + a[3][1] * k2[i] + a[3][2] * k3[i]
         });
+        let k4 = self.vec(n, |i| f[i](&trial4) * stepsize);
 
-        let k4 = self.vec(n, |i| f[i](&trial3) * stepsize);
-        let trial4 = self.vec(n, |i| {
+        let trial5 = self.vec(n, |i| {
             x[i] + a[4][0] * k1[i] + a[4][1] * k2[i] + a[4][2] * k3[i] + a[4][3] * k4[i]
         });
+        let k5 = self.vec(n, |i| f[i](&trial5) * stepsize);
 
-        let k5 = self.vec(n, |i| f[i](&trial4) * stepsize);
-        let trial5 = self.vec(n, |i| {
+        let trial6 = self.vec(n, |i| {
             x[i] + a[5][0] * k1[i]
                 + a[5][1] * k2[i]
                 + a[5][2] * k3[i]
                 + a[5][3] * k4[i]
                 + a[5][4] * k5[i]
         });
+        let k6 = self.vec(n, |i| f[i](&trial6) * stepsize);
 
-        let k6 = self.vec(n, |i| f[i](&trial5) * stepsize);
-        let trial6 = self.vec(n, |i| {
+        let trial7 = self.vec(n, |i| {
             x[i] + a[6][0] * k1[i]
                 + a[6][1] * k2[i]
                 + a[6][2] * k3[i]
@@ -205,8 +205,7 @@ impl AdaptiveIntegrationMethod for DormandPrince54 {
                 + a[6][4] * k5[i]
                 + a[6][5] * k6[i]
         });
-
-        let k7 = self.vec(n, |i| f[i](&trial6) * stepsize);
+        let k7 = self.vec(n, |i| f[i](&trial7) * stepsize);
 
         // Run both RK formulas
         let x_order5 = self.vec(n, |i| {
@@ -218,7 +217,6 @@ impl AdaptiveIntegrationMethod for DormandPrince54 {
                 + b[5] * k6[i]
                 + b[6] * k7[i]
         });
-        let deriv_next = self.vec(n, |i| f[i](&x_order5));
 
         let x_order4 = self.vec(n, |i| {
             x[i] + b_star[0] * k1[i]
@@ -236,18 +234,10 @@ impl AdaptiveIntegrationMethod for DormandPrince54 {
         // Calculate the interpolation coefficients
         let r1 = x.to_vec();
         let r2 = self.vec(n, |i| x_order5[i] - x[i]);
-        let r3 = self.vec(n, |i| deriv[i] * stepsize - r2[i]);
-        let r4 = self.vec(n, |i| {
-            2.0 * r2[i] - r3[i] - (deriv[i] + deriv_next[i]) * stepsize
-        });
+        let r3 = self.vec(n, |i| k1[i] - r2[i]);
+        let r4 = self.vec(n, |i| r2[i] - r3[i] - k7[i]);
         let r5 = self.vec(n, |i| {
-            (d[0] * k1[i]
-                + d[2] * k3[i]
-                + d[3] * k4[i]
-                + d[4] * k5[i]
-                + d[5] * k6[i]
-                + d[6] * deriv_next[i])
-                * stepsize
+            d[0] * k1[i] + d[2] * k3[i] + d[3] * k4[i] + d[4] * k5[i] + d[5] * k6[i] + d[6] * k7[i]
         });
 
         return AdaptiveIntegrationStep {

@@ -16,6 +16,8 @@ use crate::{
     utils::Tolerances,
 };
 
+const RAD_TO_DEG: f64 = 180.0 / std::f64::consts::PI;
+
 /// Simple example of the exponential decay ODE ẋ = -x over a variety of initial values.
 /// Integration method can be chosen.
 pub fn exponential_decay(method: impl IntegrationMethod + Copy) {
@@ -292,6 +294,10 @@ pub fn harmonic_oscillator_interpolation(
         .at_points(to_interpolate)
         .solve(t_end, guess_stepsize);
 
+    // let mut with_interp = solution.interp_points.unwrap();
+    // with_interp.append(&mut solution.points.clone());
+    // with_interp.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
     let chart = Chart::new()
         .title(Title::new().text(format!("Harmonic oscillator (q0 = {q_start}, p0 = {p_start}, mass = {mass}, frequency = {freq})")))
         .background_color("white")
@@ -418,7 +424,7 @@ pub fn simple_pendulum_adaptive(
     let points = solution.points;
 
     let mut chart = Chart::new()
-        .title(Title::new().text(format!("Simple pendulum (theta0 = {theta_start}, p0 = {p_start}, mass = {m}, length = {l}, g = {g})")))
+        .title(Title::new().text(format!("Simple pendulum (θ0 = {theta_start}, p0 = {p_start}, mass = {m}, length = {l}, g = {g})")))
         .background_color("white");
 
     // Top plot
@@ -437,7 +443,8 @@ pub fn simple_pendulum_adaptive(
         .collect();
 
     chart = chart
-        .grid(Grid::new().top("5%").height("42%"))
+        .grid(Grid::new().height("55%"))
+        .grid(Grid::new().height("30%").bottom("5%"))
         .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new())
         .series(Line::new().data(tuple_to_vec(&points, 0)).name("theta"))
@@ -454,9 +461,8 @@ pub fn simple_pendulum_adaptive(
     let p_over_theta: Vec<Vec<f64>> = points.iter().map(|(_, x)| vec![x[0], x[1]]).collect();
 
     chart = chart
-        .grid(Grid::new().bottom("5%").height("42%"))
-        .x_axis(Axis::new().name("theta").grid_index(1).min(-1.2).max(1.2))
-        .y_axis(Axis::new().name("p").grid_index(1).min(-1.2).max(1.2))
+        .x_axis(Axis::new().name("theta").grid_index(1))
+        .y_axis(Axis::new().name("p").grid_index(1))
         .series(
             Line::new()
                 .data(p_over_theta)
@@ -474,10 +480,10 @@ pub fn simple_pendulum_adaptive(
                     "total energy",
                     "phase trajectory",
                 ])
-                .top("center"),
+                .top("bottom"),
         );
 
-    save_chart(&chart, "simple_pendulum_adaptive", 1000, 1400);
+    save_chart(&chart, "simple_pendulum_adaptive", 1000, 1100);
 }
 
 /// A simple pendulum with the given mass `m`, gravitational acceleration `g` and length `l`.
@@ -494,8 +500,8 @@ pub fn simple_pendulum_against_small_swings(
     let theta_dot = Rc::new(move |x: &[f64]| x[1] / (m * l.powi(2)));
     let p_dot = Rc::new(move |x: &[f64]| -m * g * l * f64::sin(x[0]));
 
-    let theta_start = 0.0;
-    let p_start = 1.0;
+    let theta_start = std::f64::consts::FRAC_PI_3;
+    let p_start = 0.0;
 
     let t_start = 0.0;
     let t_end = 5.0;
@@ -520,16 +526,133 @@ pub fn simple_pendulum_against_small_swings(
         .collect();
 
     let chart = Chart::new()
-        .title(Title::new().text(format!("Simple pendulum (theta0 = {theta_start}, p0 = {p_start}, mass = {m}, length = {l}, g = {g})")))
+        .title(Title::new().text(format!(
+            "Simple pendulum (θ0 = {}°, p0 = {p_start}, mass = {m}, length = {l}, g = {g})",
+            (theta_start * RAD_TO_DEG).round() as u32
+        )))
         .background_color("white")
         .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new())
         .series(Line::new().data(tuple_to_vec(&points, 0)).name("theta"))
-        .series(Line::new().data(tuple_to_vec(&points, 1)).name("p"))
-        .series(Line::new().data(points_exact).name("theta exact (small swings)"))
-        .legend(Legend::new().data(vec!["theta", "p", "theta exact (small swings)"]).top("bottom"));
+        // .series(Line::new().data(tuple_to_vec(&points, 1)).name("p"))
+        .series(
+            Line::new()
+                .data(points_exact)
+                .name("theta exact (small swings)"),
+        )
+        .legend(
+            Legend::new()
+                .data(vec!["theta", "p", "theta exact (small swings)"])
+                .top("bottom"),
+        );
 
     save_chart(&chart, "simple_pendulum_against_small_swings", 1000, 800);
+}
+
+pub fn simple_pendulum_several_initial_values(
+    m: f64,
+    g: f64,
+    l: f64,
+    method: impl AdaptiveIntegrationMethod + Copy,
+    scheduler: impl StepsizeScheduler + Copy,
+) {
+    // x = (theta, p_theta)
+    let theta_dot = Rc::new(move |x: &[f64]| x[1] / (m * l.powi(2)));
+    let p_dot = Rc::new(move |x: &[f64]| -m * g * l * f64::sin(x[0]));
+
+    let pi = std::f64::consts::PI;
+    let theta_starts = [0.0, pi / 12.0, pi / 6.0, pi / 3.0, pi / 2.0, pi / 1.5, pi];
+    let p_start = 0.0;
+
+    let t_start = 0.0;
+    let t_end = 5.0;
+    let guess_stepsize = 0.1;
+    let tolerances = Tolerances::new(1e-7, 1e-7);
+
+    // Simulate normal swings
+    let mut simulated_t_theta = vec![];
+    for theta_start in theta_starts {
+        let system = System::new(
+            t_start,
+            &[theta_start, p_start],
+            &[theta_dot.clone(), p_dot.clone()],
+        );
+        let mut points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+            .solve(t_end, guess_stepsize)
+            .points;
+        let degrees = (theta_start * RAD_TO_DEG).round() as u32;
+        points
+            .iter_mut()
+            .for_each(|(_, phase)| phase[0] *= RAD_TO_DEG);
+        simulated_t_theta.push((degrees, points));
+    }
+
+    // Simulate a full swing
+    let theta_start_fullswing = pi / 1.2;
+    let p_start_fullswing = -2.0;
+    let system = System::new(
+        t_start,
+        &[theta_start_fullswing, p_start_fullswing],
+        &[theta_dot.clone(), p_dot.clone()],
+    );
+    let mut points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+        .solve(t_end, guess_stepsize)
+        .points;
+    // Make the angular coordinate loop
+    points.iter_mut().for_each(|(_, phase)| {
+        while phase[0] > pi {
+            phase[0] -= 2.0 * pi;
+        }
+        while phase[0] < -pi {
+            phase[0] += 2.0 * pi;
+        }
+        phase[0] *= RAD_TO_DEG
+    });
+
+    let degrees = (theta_start_fullswing * RAD_TO_DEG).round() as u32;
+    simulated_t_theta.push((degrees, points));
+
+    let mut chart = Chart::new()
+        .title(Title::new().text(format!(
+            "Simple pendulum (p0 = {p_start} except θ0 = {theta_start_fullswing}° for which p0 = {p_start_fullswing}, mass = {m}, length = {l}, g = {g})"
+        )))
+        .background_color("white")
+        .grid(Grid::new().height("55%"))
+        .grid(Grid::new().height("30%").bottom("5%"))
+        .x_axis(Axis::new().name("t"))
+        .y_axis(Axis::new().name("θ [degrees]"))
+        .x_axis(Axis::new().name("θ [degrees]").grid_index(1))
+        .y_axis(Axis::new().name("p").grid_index(1));
+
+    for (deg, points) in &simulated_t_theta {
+        let trajectory = tuple_to_vec(&points, 0);
+        let phase: Vec<Vec<f64>> = points
+            .into_iter()
+            .map(|(_m, phase)| phase.clone())
+            .collect();
+        chart = chart
+            .series(Line::new().data(trajectory).name(format!("θ0 = {deg}°")))
+            .series(
+                Line::new()
+                    .data(phase)
+                    .name(format!("θ0 = {deg}°"))
+                    .x_axis_index(1)
+                    .y_axis_index(1),
+            )
+    }
+
+    chart = chart.legend(
+        Legend::new()
+            .data(
+                simulated_t_theta
+                    .iter()
+                    .map(|(deg, _)| format!("θ0 = {deg}°"))
+                    .collect(),
+            )
+            .top("bottom"),
+    );
+
+    save_chart(&chart, "simple_pendulum_comparison", 1000, 1100);
 }
 
 /// Convenience function to save a `charming::Chart` to disk.
