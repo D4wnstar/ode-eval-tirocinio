@@ -77,6 +77,7 @@ pub trait AdaptiveIntegrationMethod {
     /// Predict the next point from the current one `x`, using the functions `f` at a
     /// step `stepsize`.
     fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> AdaptiveIntegrationStep;
+
     /// Interpolate the solution at `t`, which is expected to be between `t_curr` and `t_curr + stepsize`.
     fn interpolate(&self, t: f64, t_curr: f64, stepsize: f64, coeffs: &[Vec<f64>]) -> Vec<f64>;
 }

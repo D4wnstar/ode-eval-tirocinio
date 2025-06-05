@@ -11,8 +11,16 @@ use crate::utils::{Tolerances, VecOperations};
 /// into a more tractable form, accept or reject a step and estimate the size of the next
 /// step.
 pub trait StepsizeScheduler {
+    /// Calculate the error at the current location `x_curr` using some difference metric
+    /// `delta`, weighed by the given tolerances `tol`.
     fn error(&self, x_curr: &[f64], delta: &[f64], tol: &Tolerances) -> f64;
+
+    /// Boolean function to determine whether the step should be accepted or not based on
+    /// the value of the error calculated by `.error()`.
     fn accept(&self, error: f64) -> bool;
+
+    /// Calculate the next stepsize based on the current one `step` and the current error
+    /// `error`.
     fn next(&self, step: f64, error: f64) -> f64;
 }
 
