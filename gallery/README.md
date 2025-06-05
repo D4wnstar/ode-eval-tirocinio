@@ -54,12 +54,14 @@ $$H=\frac{p_{\theta}^{2}}{2mr^{2}}+ \frac{p_{r}^{2}}{2m}+mg(L_{0}-r\cos \theta)+
 
 with equations of motion
 
-$$\left\{\begin{align*}
+```math
+\left\{\begin{align*}
 \dot{r}&=\frac{p_{r}}{m} \\
 \dot{\theta}&=\frac{p_{\theta}}{mr^{2}} \\
 \dot{p}_{r}&=\frac{p_{\theta}^{2}}{mr^{3}}+mg\cos \theta+k(L_{0}-r) \\
 \dot{p}_{\theta}&=-mgr\sin \theta
-\end{align*}\right.$$
+\end{align*}\right.
+```
 
 Despite the relative simplicity, this system can exhibit chaotic behavior for sufficiently large initial conditions (either position, momentum or both). The top plots display the behavior of $\theta$ and $r$ over time. For $\theta$, outside of the correct equilibrium point (for $\theta$ only) in $\theta_{0}=0$, the remaining function shapes are not easily described with any analytic solution. The behavior of $r$ is that of a harmonic oscillator when $\theta_{0}=0$ (since it reduces to a simple oscillating spring) but quickly diverges for higher energies.
 
