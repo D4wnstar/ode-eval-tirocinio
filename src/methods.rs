@@ -1,3 +1,7 @@
+//! Numerical integration methods, both with static stepsize (Euler, midpoint, RK4) and
+//! adaptive stepsize (Dormand-Prince 5(4)). Also includes built-in interpolation if the
+//! method supports it.
+
 use std::rc::Rc;
 
 use crate::utils::{ScalarField, VecOperations};
@@ -39,7 +43,7 @@ impl IntegrationMethod for Midpoint {
     }
 }
 
-/// The classic fourth-order Runge-Kutta method.
+/// The classic fourth-order Runge-Kutta method (RK4).
 #[derive(Default, Clone, Copy)]
 pub struct RungeKutta4 {}
 
@@ -73,6 +77,7 @@ pub trait AdaptiveIntegrationMethod {
     /// Predict the next point from the current one `x`, using the functions `f` at a
     /// step `stepsize`.
     fn next(&self, x: &[f64], f: &[Rc<ScalarField>], stepsize: f64) -> AdaptiveIntegrationStep;
+    /// Interpolate the solution at `t`, which is expected to be between `t_curr` and `t_curr + stepsize`.
     fn interpolate(&self, t: f64, t_curr: f64, stepsize: f64, coeffs: &[Vec<f64>]) -> Vec<f64>;
 }
 
@@ -84,12 +89,12 @@ pub struct AdaptiveIntegrationStep {
     pub interp_coeffs: Vec<Vec<f64>>,
 }
 
-/// The Dormand-Prince 5(4) embedded Runge-Kutta method.
+/// The Dormand-Prince 5(4) embedded Runge-Kutta method. Supports interpolation.
 #[derive(Default, Clone, Copy)]
 pub struct DormandPrince54 {}
 
 impl DormandPrince54 {
-    // Butcher tableau coefficients (a_ij)
+    /// Butcher tableau coefficients (a_ij)
     const A: [[f64; 6]; 7] = [
         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         [1.0 / 5.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -121,7 +126,7 @@ impl DormandPrince54 {
         ],
     ];
 
-    // 5th order weights (b_i)
+    /// 5th order weights (b_i)
     const B: [f64; 7] = [
         35.0 / 384.0,
         0.0,
@@ -132,7 +137,7 @@ impl DormandPrince54 {
         0.0,
     ];
 
-    // 4th order weights (b*_i)
+    /// 4th order weights (b*_i)
     const B_STAR: [f64; 7] = [
         5179.0 / 57600.0,
         0.0,
@@ -143,11 +148,11 @@ impl DormandPrince54 {
         1.0 / 40.0,
     ];
 
-    // Nodes (c_i) if non-autonomous
+    /// Nodes (c_i) if non-autonomous
     #[allow(unused)]
     const C: [f64; 7] = [0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
 
-    // Interpolation coefficients (d_i)
+    /// Interpolation coefficients (d_i)
     const D: [f64; 7] = [
         -12715105075.0 / 11282082432.0,
         0.0,

@@ -1,3 +1,10 @@
+//! Methods to adapt stepsize dynamically during integration based on some metric, typically
+//! some form of "error" or difference to some desired metric.
+//!
+//! The name "scheduler" is inspired by "learning rate schedulers" in machine learning,
+//! which largely do the same thing (adapt learning rate dynamically based on some metric
+//! during training).
+
 use crate::utils::{Tolerances, VecOperations};
 
 /// Trait for stepsize schedulers. A scheduler must be able to convert an error estimate

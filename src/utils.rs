@@ -1,3 +1,5 @@
+//! Utility code that does not quite belong to any other module in particular.
+
 /// Rust does not support vector operations, so this trait implements a few helpers to make
 /// vector algebra easier.
 pub trait VecOperations {

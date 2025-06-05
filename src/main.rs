@@ -15,6 +15,7 @@ pub mod schedulers;
 pub mod solvers;
 pub mod utils;
 
+/// Main function to run all examples.
 fn main() {
     exponential_decay(RungeKutta4::default());
     exponential_decay_adaptive(

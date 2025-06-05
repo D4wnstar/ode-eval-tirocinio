@@ -1,3 +1,6 @@
+//! Several examples of integration on well-known physical systems to showcase the rest
+//! of the library.
+
 use std::{rc::Rc, time::Instant};
 
 use charming::{
@@ -557,6 +560,9 @@ pub fn simple_pendulum_against_small_swings(
     save_chart(&chart, "simple_pendulum_against_small_swings", 1000, 800);
 }
 
+/// A simple pendulum with the given mass `m`, gravitational acceleration `g` and length `l`.
+/// Will use an adaptive stepsize. Several starting conditions are compared to give an idea
+/// of the behavior of the system, including full 360° swings.
 pub fn simple_pendulum_comparison(
     m: f64,
     g: f64,
@@ -585,13 +591,10 @@ pub fn simple_pendulum_comparison(
             &[theta_start, p_start],
             &[theta_dot.clone(), p_dot.clone()],
         );
-        let mut points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+        let points = AdaptiveSolver::new(system, method, scheduler, tolerances)
             .solve(t_end, guess_stepsize)
             .points;
         let degrees = (theta_start * RAD_TO_DEG).round() as u32;
-        points
-            .iter_mut()
-            .for_each(|(_, phase)| phase[0] *= RAD_TO_DEG);
         simulated_t_theta.push((degrees, points));
     }
 
@@ -607,15 +610,7 @@ pub fn simple_pendulum_comparison(
         .solve(t_end, guess_stepsize)
         .points;
     // Make the angular coordinate loop
-    points.iter_mut().for_each(|(_, phase)| {
-        while phase[0] > pi {
-            phase[0] -= 2.0 * pi;
-        }
-        while phase[0] < -pi {
-            phase[0] += 2.0 * pi;
-        }
-        phase[0] *= RAD_TO_DEG
-    });
+    loop_angular_coord(&mut points, 0);
 
     let degrees = (theta_start_fullswing * RAD_TO_DEG).round() as u32;
     simulated_t_theta.push((degrees, points));
@@ -633,7 +628,10 @@ pub fn simple_pendulum_comparison(
         .x_axis(Axis::new().name("θ [degrees]").grid_index(1))
         .y_axis(Axis::new().name("p").grid_index(1));
 
-    for (deg, points) in &simulated_t_theta {
+    for (deg, points) in &mut simulated_t_theta {
+        // Convert to degrees
+        points.iter_mut().for_each(|(_, x)| x[0] *= RAD_TO_DEG);
+
         let trajectory = tuple_to_vec(&points, 0);
         let phase: Vec<Vec<f64>> = points
             .into_iter()
@@ -664,6 +662,9 @@ pub fn simple_pendulum_comparison(
     save_chart(&chart, "simple_pendulum_comparison", 1000, 1100);
 }
 
+/// An elastic pendulum with mass `m` and gravitational acceleration `g`.
+/// The pendulum's rod is considered to be a spring with rest length l0 and elastic
+/// constant k. A few starting conditions are shown.
 pub fn elastic_pendulum_comparison(
     m: f64,
     g: f64,
@@ -712,9 +713,31 @@ pub fn elastic_pendulum_comparison(
             .solve(t_end, starting_stepsize)
             .points;
         let degrees = (theta_start * RAD_TO_DEG).round() as u32;
-        simulated_points.push((degrees, points));
+        let name = format!("{degrees}°");
+        simulated_points.push((name, points));
     }
 
+    // Simulate forced swing
+    let theta_start = std::f64::consts::FRAC_PI_2;
+    let system = System::new(
+        t_start,
+        &[r_start, theta_start, -1.0, -2.0],
+        &[
+            r_dot.clone(),
+            theta_dot.clone(),
+            p_r_dot.clone(),
+            p_theta_dot.clone(),
+        ],
+    );
+    let mut points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+        .solve(t_end, starting_stepsize)
+        .points;
+    loop_angular_coord(&mut points, 1);
+    let degrees = (theta_start * RAD_TO_DEG).round() as u32;
+    let name = format!("{degrees}° (p_r0 = -1, p_θ0 = -2)");
+    simulated_points.push((name, points));
+
+    // Define 2x2 plot layout
     let mut chart = Chart::new()
         .title(Title::new().text(format!(
             "Elastic pendulum (r0 = {r_start}, p_r0 = {p_r_start}, p_θ0 = {p_theta_start}, mass = {m}, rest length = {l0}, g = {g}, k = {k})"
@@ -730,7 +753,7 @@ pub fn elastic_pendulum_comparison(
         .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new().name("θ [degrees]"))
         // r over time
-        .title(Title::new().text("r over time").top("3%").right("25%"))
+        .title(Title::new().text("r over time").top("3%").right("20%"))
         .x_axis(Axis::new().name("t").grid_index(1))
         .y_axis(Axis::new().name("r").grid_index(1))
         // cartesian trajectory
@@ -738,11 +761,12 @@ pub fn elastic_pendulum_comparison(
         .x_axis(Axis::new().name("x").grid_index(2))
         .y_axis(Axis::new().name("y").grid_index(2))
         // polar trajectory
-        .title(Title::new().text("Trajectory (Polar)").top("50%").right("25%"))
-        .x_axis(Axis::new().name("r").grid_index(3))
-        .y_axis(Axis::new().name("θ [degrees]").grid_index(3));
+        .title(Title::new().text("Phase portrait (θ, p_θ)").top("50%").right("16%"))
+        .x_axis(Axis::new().name("θ [degrees]").grid_index(3))
+        .y_axis(Axis::new().name("p_θ").grid_index(3));
 
-    for (degrees, points) in &mut simulated_points {
+    // Add the data
+    for (name, points) in &mut simulated_points {
         // Convert to Cartesian coordinates (x = rsin(θ), y = rcos(θ))
         let cartesian = points
             .iter()
@@ -752,11 +776,11 @@ pub fn elastic_pendulum_comparison(
         // Convert radians to degrees
         points.iter_mut().for_each(|(_, x)| x[1] *= RAD_TO_DEG);
 
-        // Find polar trajectory (r, θ)
-        let polar = points.iter().map(|(_, x)| vec![x[0], x[1]]).collect();
+        // Find angular phase portrait (θ, p_θ)
+        let ang_phase = points.iter().map(|(_, x)| vec![x[1], x[3]]).collect();
 
         // Make legend name
-        let name = format!("θ0 = {degrees}°");
+        let name = format!("θ0 = {name}");
         chart = chart
             // theta over time
             .series(Line::new().data(tuple_to_vec(&points, 1)).name(&name))
@@ -776,10 +800,10 @@ pub fn elastic_pendulum_comparison(
                     .x_axis_index(2)
                     .y_axis_index(2),
             )
-            // Polar trajectory
+            // Angular phase portrait
             .series(
                 Line::new()
-                    .data(polar)
+                    .data(ang_phase)
                     .name(&name)
                     .x_axis_index(3)
                     .y_axis_index(3),
@@ -791,13 +815,26 @@ pub fn elastic_pendulum_comparison(
             .data(
                 simulated_points
                     .iter()
-                    .map(|(deg, _)| format!("θ0 = {deg}°"))
+                    .map(|(name, _)| format!("θ0 = {name}"))
                     .collect(),
             )
             .top("bottom"),
     );
 
     save_chart(&chart, "elastic_pendulum_comparison", 1600, 1200);
+}
+
+/// Convenience function to loop an angular coordinate between -pi and +pi in place.
+fn loop_angular_coord(points: &mut Vec<(f64, Vec<f64>)>, arg: usize) {
+    let pi = std::f64::consts::PI;
+    points.iter_mut().for_each(|(_, x)| {
+        while x[arg] > pi {
+            x[arg] -= 2.0 * pi;
+        }
+        while x[arg] < -pi {
+            x[arg] += 2.0 * pi;
+        }
+    });
 }
 
 /// Convenience function to save a `charming::Chart` to disk.

@@ -1,5 +1,9 @@
-// I am using dx/dt = f(x), where x=x(t)
-// Numerical Recipes instead uses dy/dx = f(y), where y=y(x)
+//! User-oriented framework for making use of the solvers and schedulers defined elsewhere.
+//! The `System` object encapsulates the idea of a system of autonomous first-order ODEs.
+//! The `Solver` structs handle the actual numerical integration methods with an easy to
+//! use API.
+
+// Notation: I am using dx/dt = f(x), where x=x(t). Numerical Recipes instead uses dy/dx = f(y), where y=y(x)
 
 use std::rc::Rc;
 
@@ -129,6 +133,10 @@ where
         self
     }
 
+    /// Run the solver until `t_end`. It will return an `OdeSolution` object. The last evaluated point
+    /// is guaranteed to be at `t_end`. If an array of values of the independent variable is passed
+    /// with `.at_points()` before running this function, the solver will also interpolate the
+    /// solution at those points.
     pub fn solve(&self, t_end: f64, starting_stepsize: f64) -> OdeSolution {
         let mut points = vec![(self.system.t_start, self.system.x_start.clone())];
         let mut interp_points = if self.to_interpolate.is_some() {
@@ -218,6 +226,8 @@ where
 }
 
 /// The solution to an ODE problem, including optional interpolations and some metadata.
+/// Each point, interpolated or not, is the tuple (t, x), where t is the value of the
+/// independent variable and x is the state vector at that point.
 #[derive(Debug, Clone)]
 pub struct OdeSolution {
     pub points: Vec<(f64, Vec<f64>)>,
