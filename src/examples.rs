@@ -549,7 +549,7 @@ pub fn simple_pendulum_against_small_swings(
     save_chart(&chart, "simple_pendulum_against_small_swings", 1000, 800);
 }
 
-pub fn simple_pendulum_several_initial_values(
+pub fn simple_pendulum_comparison(
     m: f64,
     g: f64,
     l: f64,
@@ -614,7 +614,7 @@ pub fn simple_pendulum_several_initial_values(
 
     let mut chart = Chart::new()
         .title(Title::new().text(format!(
-            "Simple pendulum (p0 = {p_start} except θ0 = {theta_start_fullswing}° for which p0 = {p_start_fullswing}, mass = {m}, length = {l}, g = {g})"
+            "Simple pendulum (p0 = {p_start} except θ0 = {degrees}° for which p0 = {p_start_fullswing}, mass = {m}, length = {l}, g = {g})"
         )))
         .background_color("white")
         .grid(Grid::new().height("55%"))
@@ -653,6 +653,141 @@ pub fn simple_pendulum_several_initial_values(
     );
 
     save_chart(&chart, "simple_pendulum_comparison", 1000, 1100);
+}
+
+pub fn elastic_pendulum_comparison(
+    m: f64,
+    g: f64,
+    l0: f64,
+    k: f64,
+    method: impl AdaptiveIntegrationMethod + Copy,
+    scheduler: impl StepsizeScheduler + Copy,
+) {
+    // x = (r, θ, p_r, p_θ)
+    //      0  1  2    3
+    let r_dot = Rc::new(move |x: &[f64]| x[2] / m);
+    let theta_dot = Rc::new(move |x: &[f64]| x[3] / (m * x[0].powi(2)));
+    let p_r_dot = Rc::new(move |x: &[f64]| {
+        x[3].powi(2) / (m * x[0].powi(3)) + m * g * f64::cos(x[1]) + k * (l0 - x[0])
+    });
+    let p_theta_dot = Rc::new(move |x: &[f64]| -m * g * x[0] * f64::sin(x[1]));
+
+    let r_start = l0;
+    let theta_starts = [
+        0.0,
+        std::f64::consts::FRAC_PI_6,
+        std::f64::consts::FRAC_PI_2,
+    ];
+    let p_r_start = 0.0;
+    let p_theta_start = 0.0;
+
+    let t_start = 0.0;
+    let t_end = 10.0;
+    let starting_stepsize = 0.1;
+    let tolerances = Tolerances::new(1e-7, 1e-7);
+
+    // Simulate normal swings
+    let mut simulated_points = vec![];
+    for theta_start in theta_starts {
+        let system = System::new(
+            t_start,
+            &[r_start, theta_start, p_r_start, p_theta_start],
+            &[
+                r_dot.clone(),
+                theta_dot.clone(),
+                p_r_dot.clone(),
+                p_theta_dot.clone(),
+            ],
+        );
+        let points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+            .solve(t_end, starting_stepsize)
+            .points;
+        let degrees = (theta_start * RAD_TO_DEG).round() as u32;
+        simulated_points.push((degrees, points));
+    }
+
+    let mut chart = Chart::new()
+        .title(Title::new().text(format!(
+            "Elastic pendulum (r0 = {r_start}, p_r0 = {p_r_start}, p_θ0 = {p_theta_start}, mass = {m}, rest length = {l0}, g = {g}, k = {k})"
+        )).left("center"))
+        .background_color("white")
+        .grid(Grid::new().width("42%").height("40%").left("5%").top("7%"))
+        .grid(Grid::new().width("42%").height("40%").right("5%").top("7%"))
+        .grid(Grid::new().width("42%").height("40%").left("5%").bottom("5%"))
+        .grid(Grid::new().width("42%").height("40%").right("5%").bottom("5%"))
+        // theta over time
+        .title(Title::new().text("θ over time").top("3%").left("20%"))
+        .x_axis(Axis::new().name("t"))
+        .y_axis(Axis::new().name("θ [degrees]"))
+        // r over time
+        .title(Title::new().text("r over time").top("3%").right("25%"))
+        .x_axis(Axis::new().name("t").grid_index(1))
+        .y_axis(Axis::new().name("r").grid_index(1))
+        // cartesian trajectory
+        .title(Title::new().text("Trajectory (Cartesian)").top("50%").left("20%"))
+        .x_axis(Axis::new().name("x").grid_index(2))
+        .y_axis(Axis::new().name("y").grid_index(2))
+        // polar trajectory
+        .title(Title::new().text("Trajectory (Polar)").top("50%").right("25%"))
+        .x_axis(Axis::new().name("r").grid_index(3))
+        .y_axis(Axis::new().name("θ [degrees]").grid_index(3));
+
+    for (degrees, points) in &mut simulated_points {
+        // Convert to Cartesian coordinates (x = rsin(θ), y = rcos(θ))
+        let cartesian = points
+            .iter()
+            .map(|(_, x)| vec![x[0] * f64::sin(x[1]), -x[0] * f64::cos(x[1])])
+            .collect();
+
+        // Convert radians to degrees
+        points.iter_mut().for_each(|(_, x)| x[1] *= RAD_TO_DEG);
+
+        // Find polar trajectory (r, θ)
+        let polar = points.iter().map(|(_, x)| vec![x[0], x[1]]).collect();
+
+        // Make legend name
+        let name = format!("θ0 = {degrees}°");
+        chart = chart
+            // theta over time
+            .series(Line::new().data(tuple_to_vec(&points, 1)).name(&name))
+            // r over time
+            .series(
+                Line::new()
+                    .data(tuple_to_vec(&points, 0))
+                    .name(&name)
+                    .x_axis_index(1)
+                    .y_axis_index(1),
+            )
+            // Cartesian trajectory
+            .series(
+                Line::new()
+                    .data(cartesian)
+                    .name(&name)
+                    .x_axis_index(2)
+                    .y_axis_index(2),
+            )
+            // Polar trajectory
+            .series(
+                Line::new()
+                    .data(polar)
+                    .name(&name)
+                    .x_axis_index(3)
+                    .y_axis_index(3),
+            );
+    }
+
+    chart = chart.legend(
+        Legend::new()
+            .data(
+                simulated_points
+                    .iter()
+                    .map(|(deg, _)| format!("θ0 = {deg}°"))
+                    .collect(),
+            )
+            .top("bottom"),
+    );
+
+    save_chart(&chart, "elastic_pendulum_comparison", 1600, 1200);
 }
 
 /// Convenience function to save a `charming::Chart` to disk.
