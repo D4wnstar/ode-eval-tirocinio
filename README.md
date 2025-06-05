@@ -1,4 +1,4 @@
-An implementation of a numerical differential equation solver, written in Rust, with supported for a handful of solving methods. Currently implemented:
+An implementation of a numerical differential equation solver, written entirely in Rust, with support for a handful of solving methods. Currently implemented:
 - Euler's method
 - Midpoint method
 - Fourth-order Runge-Kutta (RK4)
