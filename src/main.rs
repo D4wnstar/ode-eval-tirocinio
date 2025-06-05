@@ -16,46 +16,46 @@ pub mod solvers;
 pub mod utils;
 
 fn main() {
-    // exponential_decay(RungeKutta4::default());
-    // exponential_decay_adaptive(
-    //     DormandPrince54::default(),
-    //     DeltaScheduler::with_dimension(1),
-    // );
-    // method_comparison();
-    // harmonic_oscillator(1.0, 2.0, RungeKutta4::default());
-    // harmonic_oscillator_adaptive(
-    //     1.0,
-    //     2.0,
-    //     DormandPrince54::default(),
-    //     DeltaScheduler::with_dimension(2),
-    // );
-    // harmonic_oscillator_interpolation(
-    //     1.0,
-    //     2.0,
-    //     DormandPrince54::default(),
-    //     DeltaScheduler::with_dimension(2),
-    // );
-    // simple_pendulum_adaptive(
-    //     1.0,
-    //     9.8,
-    //     2.0,
-    //     DormandPrince54::default(),
-    //     DeltaScheduler::with_dimension(2),
-    // );
-    // simple_pendulum_against_small_swings(
-    //     1.0,
-    //     9.8,
-    //     1.0,
-    //     DormandPrince54::default(),
-    //     DeltaScheduler::with_dimension(2),
-    // );
-    // simple_pendulum_comparison(
-    //     1.0,
-    //     9.8,
-    //     1.0,
-    //     DormandPrince54::default(),
-    //     DeltaScheduler::with_dimension(2),
-    // );
+    exponential_decay(RungeKutta4::default());
+    exponential_decay_adaptive(
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(1),
+    );
+    method_comparison();
+    harmonic_oscillator(1.0, 2.0, RungeKutta4::default());
+    harmonic_oscillator_adaptive(
+        1.0,
+        2.0,
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(2),
+    );
+    harmonic_oscillator_interpolation(
+        1.0,
+        2.0,
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(2),
+    );
+    simple_pendulum_adaptive(
+        1.0,
+        9.8,
+        2.0,
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(2),
+    );
+    simple_pendulum_against_small_swings(
+        1.0,
+        9.8,
+        1.0,
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(2),
+    );
+    simple_pendulum_comparison(
+        1.0,
+        9.8,
+        1.0,
+        DormandPrince54::default(),
+        DeltaScheduler::with_dimension(2),
+    );
     elastic_pendulum_comparison(
         1.0,
         9.8,

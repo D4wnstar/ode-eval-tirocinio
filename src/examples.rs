@@ -3,6 +3,7 @@ use std::{rc::Rc, time::Instant};
 use charming::{
     Chart, HtmlRenderer, ImageFormat, ImageRenderer,
     component::{Axis, Grid, Legend, Title},
+    element::{Tooltip, Trigger},
     series::{Line, Scatter},
 };
 
@@ -41,6 +42,7 @@ pub fn exponential_decay(method: impl IntegrationMethod + Copy) {
     let chart = Chart::new()
         .title(Title::new().text("ẋ = -x for different initial values"))
         .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item))
         .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new().name("x"))
         .series(Line::new().data(tuple_to_vec(&points2, 0)))
@@ -90,6 +92,7 @@ pub fn exponential_decay_adaptive(
     let chart = Chart::new()
         .title(Title::new().text("ẋ = -x for different initial values (adaptive stepsize)"))
         .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item))
         .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new().name("x"))
         .series(Line::new().data(tuple_to_vec(&points2, 0)))
@@ -137,6 +140,7 @@ pub fn method_comparison() {
                 .text("Method comparison (ẋ = -x; initial value x0 = 2.0; stepsize = 0.5 [left] and 0.1 [right])")
                 .left("center"),
         )
+        .tooltip(Tooltip::new().trigger(Trigger::Item))
         .legend(
             Legend::new()
                 .data(vec![
@@ -301,6 +305,7 @@ pub fn harmonic_oscillator_interpolation(
     let chart = Chart::new()
         .title(Title::new().text(format!("Harmonic oscillator (q0 = {q_start}, p0 = {p_start}, mass = {mass}, frequency = {freq})")))
         .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item))
         .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new().name("q"))
         .series(Scatter::new().data(tuple_to_vec(&solution.points, 0)).name("q solved"))
@@ -334,7 +339,8 @@ fn process_harmonic_oscillator(
         .title(Title::new().text(format!(
             "Harmonic oscillator (q0 = {q_start}, p0 = {p_start}, mass = {mass}, frequency = {freq})"
         )))
-        .background_color("white");
+        .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item));
 
     // Top plot
     let kinetic_over_time: Vec<Vec<f64>> = points
@@ -425,7 +431,8 @@ pub fn simple_pendulum_adaptive(
 
     let mut chart = Chart::new()
         .title(Title::new().text(format!("Simple pendulum (θ0 = {theta_start}, p0 = {p_start}, mass = {m}, length = {l}, g = {g})")))
-        .background_color("white");
+        .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item));
 
     // Top plot
     let kinetic_over_time: Vec<Vec<f64>> = points
@@ -531,6 +538,7 @@ pub fn simple_pendulum_against_small_swings(
             (theta_start * RAD_TO_DEG).round() as u32
         )))
         .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item))
         .x_axis(Axis::new().name("t"))
         .y_axis(Axis::new())
         .series(Line::new().data(tuple_to_vec(&points, 0)).name("theta"))
@@ -617,6 +625,7 @@ pub fn simple_pendulum_comparison(
             "Simple pendulum (p0 = {p_start} except θ0 = {degrees}° for which p0 = {p_start_fullswing}, mass = {m}, length = {l}, g = {g})"
         )))
         .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item))
         .grid(Grid::new().height("55%"))
         .grid(Grid::new().height("30%").bottom("5%"))
         .x_axis(Axis::new().name("t"))
@@ -711,6 +720,7 @@ pub fn elastic_pendulum_comparison(
             "Elastic pendulum (r0 = {r_start}, p_r0 = {p_r_start}, p_θ0 = {p_theta_start}, mass = {m}, rest length = {l0}, g = {g}, k = {k})"
         )).left("center"))
         .background_color("white")
+        .tooltip(Tooltip::new().trigger(Trigger::Item))
         .grid(Grid::new().width("42%").height("40%").left("5%").top("7%"))
         .grid(Grid::new().width("42%").height("40%").right("5%").top("7%"))
         .grid(Grid::new().width("42%").height("40%").left("5%").bottom("5%"))
