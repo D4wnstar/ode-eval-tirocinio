@@ -5,10 +5,10 @@
 
 // Notation: I am using dx/dt = f(x), where x=x(t). Numerical Recipes instead uses dy/dx = f(y), where y=y(x)
 
-use std::{f64::consts::PI, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
-    methods::{AdaptiveIntegrationMethod, IntegrationMethod, RungeKutta4},
+    methods::{AdaptiveIntegrationMethod, IntegrationMethod},
     schedulers::StepsizeScheduler,
     utils::{ScalarField, Tolerances},
 };
@@ -23,13 +23,13 @@ use crate::{
 /// - `derivatives` is the N-dimensional vector of all `f_i(x)` components of `f(x)`, each being an
 ///    R^N -> R scalar field.
 #[derive(Clone)]
-pub struct System {
+pub struct OdeSystem {
     t_start: f64,
     x_start: Vec<f64>,
     derivatives: Vec<Rc<ScalarField>>,
 }
 
-impl System {
+impl OdeSystem {
     pub fn new(start: f64, initial_values: &[f64], derivatives: &[Rc<ScalarField>]) -> Self {
         if initial_values.len() != derivatives.len() {
             panic!(
@@ -50,14 +50,14 @@ impl System {
 /// A simple ODE solver. It will evaluate the `system` with a static `stepsize`
 /// using any given `IntegrationMethod`.
 pub struct OdeSolver<M: IntegrationMethod> {
-    system: System,
+    system: OdeSystem,
     method: M,
     // TODO: Move this as an argument of `solve`
     stepsize: f64,
 }
 
 impl<M: IntegrationMethod> OdeSolver<M> {
-    pub fn new(system: System, method: M, stepsize: f64) -> Self {
+    pub fn new(system: OdeSystem, method: M, stepsize: f64) -> Self {
         Self {
             system,
             stepsize,
@@ -97,7 +97,7 @@ where
     M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
 {
-    system: System,
+    system: OdeSystem,
     method: M,
     scheduler: S,
     tolerances: Tolerances,
@@ -117,7 +117,7 @@ where
     M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
 {
-    pub fn new(system: System, method: M, scheduler: S, tolerances: Tolerances) -> Self {
+    pub fn new(system: OdeSystem, method: M, scheduler: S, tolerances: Tolerances) -> Self {
         OdeAdaptiveSolver {
             system,
             method,
@@ -229,16 +229,27 @@ where
 pub struct PdeSolver<M: IntegrationMethod + Clone> {
     ode_method: M,
     stepsize: f64,
+    init_condition: Rc<dyn Fn(f64) -> f64>,
+    //                        state,  dx   i
+    discretization: Rc<dyn Fn(&[f64], f64, usize) -> f64>,
 }
 
 impl<M: IntegrationMethod + Clone> PdeSolver<M> {
-    pub fn new(ode_method: M, stepsize: f64) -> Self {
+    pub fn new(
+        ode_method: M,
+        stepsize: f64,
+        init_condition: Rc<dyn Fn(f64) -> f64>,
+        discretization: Rc<dyn Fn(&[f64], f64, usize) -> f64>,
+    ) -> Self {
         PdeSolver {
             ode_method,
             stepsize,
+            init_condition,
+            discretization,
         }
     }
 
+    /// Solve the PDE numerically with the method of lines.
     pub fn solve(
         &self,
         t_start: f64,
@@ -250,23 +261,20 @@ impl<M: IntegrationMethod + Clone> PdeSolver<M> {
         let mut init_conditions = Vec::with_capacity(grid_points);
         let mut odes: Vec<Rc<ScalarField>> = Vec::with_capacity(grid_points);
         let dx = (x_end - x_start) / (grid_points - 1) as f64;
-        let delta_sq = dx.powi(2);
-        for i in 0..grid_points {
-            let x = x_start + dx * i as f64;
-            let ic = f64::sin(PI / 2.0 * x);
-            init_conditions.push(ic);
 
-            let ode: Rc<ScalarField> = if i == 0 {
-                Rc::new(move |_x: &[f64]| 0.0)
-            } else if i == grid_points - 1 {
-                Rc::new(move |x: &[f64]| 2.0 * (x[i - 1] - x[i]) / delta_sq)
-            } else {
-                Rc::new(move |x: &[f64]| (x[i + 1] - 2.0 * x[i] + x[i - 1]) / delta_sq)
-            };
+        for i in 0..grid_points {
+            // Calculate initial time conditions
+            let x = x_start + dx * i as f64;
+            init_conditions.push((self.init_condition)(x));
+
+            // Define an array of ODEs, one for each spatial grid point
+            let disc = self.discretization.clone();
+            let ode = Rc::new(move |state: &[f64]| (disc)(state, dx, i));
             odes.push(ode);
         }
 
-        let ode_system = System::new(t_start, &init_conditions, &odes);
+        // Solve the grid ODEs simultaneously
+        let ode_system = OdeSystem::new(t_start, &init_conditions, &odes);
         let points =
             OdeSolver::new(ode_system, self.ode_method.clone(), self.stepsize).solve(t_end);
 

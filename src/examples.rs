@@ -1,13 +1,13 @@
 //! Several examples of integration on well-known physical systems to showcase the rest
 //! of the library.
 
-use std::{fs, rc::Rc, time::Instant};
+use std::{f64::consts::PI, fs, rc::Rc, time::Instant};
 
 use charming::{
     Chart, HtmlRenderer, ImageFormat, ImageRenderer,
     component::{Axis, Axis3D, Grid, Grid3D, Legend, Title},
-    element::{AxisType, DimensionEncode, Tooltip, Trigger},
-    series::{Bar3d, Line, Scatter},
+    element::{Tooltip, Trigger},
+    series::{Line, Scatter},
 };
 
 use crate::{
@@ -16,7 +16,7 @@ use crate::{
     solvers::{OdeAdaptiveSolver, PdeSolver},
 };
 use crate::{
-    solvers::{OdeSolver, System},
+    solvers::{OdeSolver, OdeSystem},
     utils::Tolerances,
 };
 
@@ -30,11 +30,11 @@ pub fn exponential_decay(method: impl IntegrationMethod + Copy) {
     let t_end = 5.0;
     let stepsize = 0.1;
 
-    let system2 = System::new(t_start, &[2.0], &[ode.clone()]);
-    let system1 = System::new(t_start, &[1.0], &[ode.clone()]);
-    let system0 = System::new(t_start, &[0.0], &[ode.clone()]);
-    let systemm1 = System::new(t_start, &[-1.0], &[ode.clone()]);
-    let systemm2 = System::new(t_start, &[-2.0], &[ode]);
+    let system2 = OdeSystem::new(t_start, &[2.0], &[ode.clone()]);
+    let system1 = OdeSystem::new(t_start, &[1.0], &[ode.clone()]);
+    let system0 = OdeSystem::new(t_start, &[0.0], &[ode.clone()]);
+    let systemm1 = OdeSystem::new(t_start, &[-1.0], &[ode.clone()]);
+    let systemm2 = OdeSystem::new(t_start, &[-2.0], &[ode]);
 
     let points2 = OdeSolver::new(system2, method, stepsize).solve(t_end);
     let points1 = OdeSolver::new(system1, method, stepsize).solve(t_end);
@@ -70,11 +70,11 @@ pub fn exponential_decay_adaptive(
     let guess_stepsize = 0.1;
     let tolerances = Tolerances::new(1e-6, 1e-6);
 
-    let system2 = System::new(t_start, &[2.0], &[ode.clone()]);
-    let system1 = System::new(t_start, &[1.0], &[ode.clone()]);
-    let system0 = System::new(t_start, &[0.0], &[ode.clone()]);
-    let systemm1 = System::new(t_start, &[-1.0], &[ode.clone()]);
-    let systemm2 = System::new(t_start, &[-2.0], &[ode]);
+    let system2 = OdeSystem::new(t_start, &[2.0], &[ode.clone()]);
+    let system1 = OdeSystem::new(t_start, &[1.0], &[ode.clone()]);
+    let system0 = OdeSystem::new(t_start, &[0.0], &[ode.clone()]);
+    let systemm1 = OdeSystem::new(t_start, &[-1.0], &[ode.clone()]);
+    let systemm2 = OdeSystem::new(t_start, &[-2.0], &[ode]);
 
     let points2 = OdeAdaptiveSolver::new(system2, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
@@ -113,7 +113,7 @@ pub fn method_comparison() {
     let ode = Rc::new(|x: &[f64]| -x[0]);
     let t_start = 0.0;
     let t_end = 5.0;
-    let system = System::new(t_start, &[2.0], &[ode]);
+    let system = OdeSystem::new(t_start, &[2.0], &[ode]);
 
     // A low stepsize is recommended to make the the errors more visually obvious.
     let stepsize = 0.5;
@@ -234,7 +234,7 @@ pub fn harmonic_oscillator(mass: f64, freq: f64, method: impl IntegrationMethod)
     let t_end = 5.0;
     let stepsize = 0.1;
 
-    let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
+    let system = OdeSystem::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
     let points = OdeSolver::new(system, method, stepsize).solve(t_end);
 
     let chart = process_harmonic_oscillator(points, q_start, p_start, mass, freq);
@@ -261,7 +261,7 @@ pub fn harmonic_oscillator_adaptive(
     let guess_stepsize = 0.1;
     let tolerances = Tolerances::new(1e-6, 1e-6);
 
-    let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
+    let system = OdeSystem::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
     let solution =
         OdeAdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
 
@@ -298,7 +298,7 @@ pub fn harmonic_oscillator_interpolation(
         .map(|(i, t)| i as f64 * t)
         .collect();
 
-    let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
+    let system = OdeSystem::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
     let solution = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
         .at_points(to_interpolate)
         .solve(t_end, guess_stepsize);
@@ -429,7 +429,7 @@ pub fn simple_pendulum_adaptive(
     let guess_stepsize = 0.1;
     let tolerances = Tolerances::new(1e-7, 1e-7);
 
-    let system = System::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
+    let system = OdeSystem::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
     let solution =
         OdeAdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
     let points = solution.points;
@@ -520,7 +520,7 @@ pub fn simple_pendulum_against_small_swings(
     let guess_stepsize = 0.1;
     let tolerances = Tolerances::new(1e-7, 1e-7);
 
-    let system = System::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
+    let system = OdeSystem::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
     let points = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
@@ -588,7 +588,7 @@ pub fn simple_pendulum_comparison(
     // Simulate normal swings
     let mut simulated_t_theta = vec![];
     for theta_start in theta_starts {
-        let system = System::new(
+        let system = OdeSystem::new(
             t_start,
             &[theta_start, p_start],
             &[theta_dot.clone(), p_dot.clone()],
@@ -603,7 +603,7 @@ pub fn simple_pendulum_comparison(
     // Simulate a full swing
     let theta_start_fullswing = pi / 1.2;
     let p_start_fullswing = -2.0;
-    let system = System::new(
+    let system = OdeSystem::new(
         t_start,
         &[theta_start_fullswing, p_start_fullswing],
         &[theta_dot.clone(), p_dot.clone()],
@@ -701,7 +701,7 @@ pub fn elastic_pendulum_comparison(
     // Simulate normal swings
     let mut simulated_points = vec![];
     for theta_start in theta_starts {
-        let system = System::new(
+        let system = OdeSystem::new(
             t_start,
             &[r_start, theta_start, p_r_start, p_theta_start],
             &[
@@ -721,7 +721,7 @@ pub fn elastic_pendulum_comparison(
 
     // Simulate forced swing
     let theta_start = std::f64::consts::FRAC_PI_2;
-    let system = System::new(
+    let system = OdeSystem::new(
         t_start,
         &[r_start, theta_start, -1.0, -2.0],
         &[
@@ -826,26 +826,36 @@ pub fn elastic_pendulum_comparison(
     save_chart(&chart, "elastic_pendulum_comparison", 1600, 1200);
 }
 
-/// Convenience function to loop an angular coordinate between -pi and +pi in place.
-fn loop_angular_coord(points: &mut Vec<(f64, Vec<f64>)>, arg: usize) {
-    let pi = std::f64::consts::PI;
-    points.iter_mut().for_each(|(_, x)| {
-        while x[arg] > pi {
-            x[arg] -= 2.0 * pi;
-        }
-        while x[arg] < -pi {
-            x[arg] += 2.0 * pi;
-        }
-    });
-}
-
 pub fn heat_equation() {
     let x_start = 0.0;
     let x_end = 1.0;
     let grid_points = 20;
     let x_step = (x_end - x_start) / grid_points as f64;
-    let points =
-        PdeSolver::new(RungeKutta4::default(), 0.001).solve(0.0, 1.0, x_start, x_end, grid_points);
+
+    // Initial time condition
+    let ic = Rc::new(move |x: f64| f64::sin(PI / 2.0 * x));
+    // Spatial discretization with second-order central finite differences
+    let disc = Rc::new(move |state: &[f64], dx: f64, i: usize| {
+        let delta_sq = dx.powi(2);
+        if i == 0 {
+            // Hard wall on left side
+            0.0
+        } else if i == grid_points - 1 {
+            // Ghost point on right side
+            2.0 * (state[i - 1] - state[i]) / delta_sq
+        } else {
+            // Second-order central FD in the middle
+            (state[i + 1] - 2.0 * state[i] + state[i - 1]) / delta_sq
+        }
+    });
+
+    let points = PdeSolver::new(RungeKutta4::default(), 0.001, ic, disc).solve(
+        0.0,
+        1.0,
+        x_start,
+        x_end,
+        grid_points,
+    );
 
     // data = [
     //   [[t0, x0, u00], [t1, x0, u01], [t2, x0, u02], ...], // ODE 0
@@ -860,6 +870,8 @@ pub fn heat_equation() {
         }
     }
 
+    // Write the numerical data out to JSON for plotting somewhere else
+    // since charming's support of 3D plot is not great
     let out = serde_json::to_string(&data).unwrap();
     fs::write("gallery/data/heat_equation.json", out).unwrap();
 
@@ -870,7 +882,7 @@ pub fn heat_equation() {
         .z_axis3d(Axis3D::new())
         .grid3d(Grid3D::new());
 
-    // Add all ODEs to plot
+    // Add all ODE solutions to plot
     for d in data {
         chart = chart.series(Line::new().data(d));
     }
@@ -878,6 +890,18 @@ pub fn heat_equation() {
     let renderer = HtmlRenderer::new("ODE Chart", 1200, 900);
     let html = renderer.render(&chart).unwrap().replace("line", "line3D"); // charming does not currently have bindings for line3D
     fs::write("gallery/interactive/heat_equation.html", html).unwrap();
+}
+
+/// Convenience function to loop an angular coordinate between -pi and +pi in place.
+fn loop_angular_coord(points: &mut Vec<(f64, Vec<f64>)>, arg: usize) {
+    points.iter_mut().for_each(|(_, x)| {
+        while x[arg] > PI {
+            x[arg] -= 2.0 * PI;
+        }
+        while x[arg] < -PI {
+            x[arg] += 2.0 * PI;
+        }
+    });
 }
 
 /// Convenience function to save a [`charming::Chart`] to disk.
