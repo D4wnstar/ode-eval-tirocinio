@@ -1,22 +1,22 @@
 //! Several examples of integration on well-known physical systems to showcase the rest
 //! of the library.
 
-use std::{rc::Rc, time::Instant};
+use std::{fs, rc::Rc, time::Instant};
 
 use charming::{
     Chart, HtmlRenderer, ImageFormat, ImageRenderer,
-    component::{Axis, Grid, Legend, Title},
-    element::{Tooltip, Trigger},
-    series::{Line, Scatter},
+    component::{Axis, Axis3D, Grid, Grid3D, Legend, Title},
+    element::{AxisType, DimensionEncode, Tooltip, Trigger},
+    series::{Bar3d, Line, Scatter},
 };
 
 use crate::{
     methods::{AdaptiveIntegrationMethod, Euler, IntegrationMethod, Midpoint, RungeKutta4},
     schedulers::StepsizeScheduler,
-    solvers::AdaptiveSolver,
+    solvers::{OdeAdaptiveSolver, PdeSolver},
 };
 use crate::{
-    solvers::{Solver, System},
+    solvers::{OdeSolver, System},
     utils::Tolerances,
 };
 
@@ -36,11 +36,11 @@ pub fn exponential_decay(method: impl IntegrationMethod + Copy) {
     let systemm1 = System::new(t_start, &[-1.0], &[ode.clone()]);
     let systemm2 = System::new(t_start, &[-2.0], &[ode]);
 
-    let points2 = Solver::new(system2, method, stepsize).solve(t_end);
-    let points1 = Solver::new(system1, method, stepsize).solve(t_end);
-    let points0 = Solver::new(system0, method, stepsize).solve(t_end);
-    let pointsm1 = Solver::new(systemm1, method, stepsize).solve(t_end);
-    let pointsm2 = Solver::new(systemm2, method, stepsize).solve(t_end);
+    let points2 = OdeSolver::new(system2, method, stepsize).solve(t_end);
+    let points1 = OdeSolver::new(system1, method, stepsize).solve(t_end);
+    let points0 = OdeSolver::new(system0, method, stepsize).solve(t_end);
+    let pointsm1 = OdeSolver::new(systemm1, method, stepsize).solve(t_end);
+    let pointsm2 = OdeSolver::new(systemm2, method, stepsize).solve(t_end);
 
     let chart = Chart::new()
         .title(Title::new().text("ẋ = -x for different initial values"))
@@ -76,19 +76,19 @@ pub fn exponential_decay_adaptive(
     let systemm1 = System::new(t_start, &[-1.0], &[ode.clone()]);
     let systemm2 = System::new(t_start, &[-2.0], &[ode]);
 
-    let points2 = AdaptiveSolver::new(system2, method, scheduler, tolerances)
+    let points2 = OdeAdaptiveSolver::new(system2, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
-    let points1 = AdaptiveSolver::new(system1, method, scheduler, tolerances)
+    let points1 = OdeAdaptiveSolver::new(system1, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
-    let points0 = AdaptiveSolver::new(system0, method, scheduler, tolerances)
+    let points0 = OdeAdaptiveSolver::new(system0, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
-    let pointsm1 = AdaptiveSolver::new(systemm1, method, scheduler, tolerances)
+    let pointsm1 = OdeAdaptiveSolver::new(systemm1, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
-    let pointsm2 = AdaptiveSolver::new(systemm2, method, scheduler, tolerances)
+    let pointsm2 = OdeAdaptiveSolver::new(systemm2, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
 
@@ -117,16 +117,18 @@ pub fn method_comparison() {
 
     // A low stepsize is recommended to make the the errors more visually obvious.
     let stepsize = 0.5;
-    let points_euler = Solver::new(system.clone(), Euler::default(), stepsize).solve(t_end);
-    let points_midpoint = Solver::new(system.clone(), Midpoint::default(), stepsize).solve(t_end);
-    let points_rk4 = Solver::new(system.clone(), RungeKutta4::default(), stepsize).solve(t_end);
+    let points_euler = OdeSolver::new(system.clone(), Euler::default(), stepsize).solve(t_end);
+    let points_midpoint =
+        OdeSolver::new(system.clone(), Midpoint::default(), stepsize).solve(t_end);
+    let points_rk4 = OdeSolver::new(system.clone(), RungeKutta4::default(), stepsize).solve(t_end);
 
     // Smaller step size to see how methods scale
     let stepsize = 0.1;
-    let points_euler_dense = Solver::new(system.clone(), Euler::default(), stepsize).solve(t_end);
+    let points_euler_dense =
+        OdeSolver::new(system.clone(), Euler::default(), stepsize).solve(t_end);
     let points_midpoint_dense =
-        Solver::new(system.clone(), Midpoint::default(), stepsize).solve(t_end);
-    let points_rk4_dense = Solver::new(system, RungeKutta4::default(), stepsize).solve(t_end);
+        OdeSolver::new(system.clone(), Midpoint::default(), stepsize).solve(t_end);
+    let points_rk4_dense = OdeSolver::new(system, RungeKutta4::default(), stepsize).solve(t_end);
 
     // Exact analytical solution
     let solution = |t: f64, x0: f64| x0 * (-t).exp();
@@ -233,7 +235,7 @@ pub fn harmonic_oscillator(mass: f64, freq: f64, method: impl IntegrationMethod)
     let stepsize = 0.1;
 
     let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
-    let points = Solver::new(system, method, stepsize).solve(t_end);
+    let points = OdeSolver::new(system, method, stepsize).solve(t_end);
 
     let chart = process_harmonic_oscillator(points, q_start, p_start, mass, freq);
     save_chart(&chart, "harmonic_oscillator", 1000, 1400);
@@ -261,7 +263,7 @@ pub fn harmonic_oscillator_adaptive(
 
     let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
     let solution =
-        AdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
+        OdeAdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
 
     let chart = process_harmonic_oscillator(solution.points, q_start, p_start, mass, freq);
     save_chart(&chart, "harmonic_oscillator_adaptive", 1000, 1400);
@@ -297,7 +299,7 @@ pub fn harmonic_oscillator_interpolation(
         .collect();
 
     let system = System::new(t_start, &[q_start, p_start], &[q_dot, p_dot]);
-    let solution = AdaptiveSolver::new(system, method, scheduler, tolerances)
+    let solution = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
         .at_points(to_interpolate)
         .solve(t_end, guess_stepsize);
 
@@ -429,7 +431,7 @@ pub fn simple_pendulum_adaptive(
 
     let system = System::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
     let solution =
-        AdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
+        OdeAdaptiveSolver::new(system, method, scheduler, tolerances).solve(t_end, guess_stepsize);
     let points = solution.points;
 
     let mut chart = Chart::new()
@@ -519,7 +521,7 @@ pub fn simple_pendulum_against_small_swings(
     let tolerances = Tolerances::new(1e-7, 1e-7);
 
     let system = System::new(t_start, &[theta_start, p_start], &[theta_dot, p_dot]);
-    let points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+    let points = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
 
@@ -591,7 +593,7 @@ pub fn simple_pendulum_comparison(
             &[theta_start, p_start],
             &[theta_dot.clone(), p_dot.clone()],
         );
-        let points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+        let points = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
             .solve(t_end, guess_stepsize)
             .points;
         let degrees = (theta_start * RAD_TO_DEG).round() as u32;
@@ -606,7 +608,7 @@ pub fn simple_pendulum_comparison(
         &[theta_start_fullswing, p_start_fullswing],
         &[theta_dot.clone(), p_dot.clone()],
     );
-    let mut points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+    let mut points = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
         .solve(t_end, guess_stepsize)
         .points;
     // Make the angular coordinate loop
@@ -709,7 +711,7 @@ pub fn elastic_pendulum_comparison(
                 p_theta_dot.clone(),
             ],
         );
-        let points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+        let points = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
             .solve(t_end, starting_stepsize)
             .points;
         let degrees = (theta_start * RAD_TO_DEG).round() as u32;
@@ -729,7 +731,7 @@ pub fn elastic_pendulum_comparison(
             p_theta_dot.clone(),
         ],
     );
-    let mut points = AdaptiveSolver::new(system, method, scheduler, tolerances)
+    let mut points = OdeAdaptiveSolver::new(system, method, scheduler, tolerances)
         .solve(t_end, starting_stepsize)
         .points;
     loop_angular_coord(&mut points, 1);
@@ -837,7 +839,48 @@ fn loop_angular_coord(points: &mut Vec<(f64, Vec<f64>)>, arg: usize) {
     });
 }
 
-/// Convenience function to save a `charming::Chart` to disk.
+pub fn heat_equation() {
+    let x_start = 0.0;
+    let x_end = 1.0;
+    let grid_points = 20;
+    let x_step = (x_end - x_start) / grid_points as f64;
+    let points =
+        PdeSolver::new(RungeKutta4::default(), 0.001).solve(0.0, 1.0, x_start, x_end, grid_points);
+
+    // data = [
+    //   [[t0, x0, u00], [t1, x0, u01], [t2, x0, u02], ...], // ODE 0
+    //   [[t0, x1, u10], [t1, x1, u11], [t2, x1, u12], ...], // ODE 1
+    //   [[t0, x2, u20], [t1, x2, u21], [t2, x2, u22], ...], // ODE 2
+    //   ...
+    // ]
+    let mut data: Vec<Vec<Vec<f64>>> = vec![Vec::new(); grid_points];
+    for (t, x) in points {
+        for i in 0..data.len() {
+            data[i].push(vec![t, x_step * i as f64, x[i]]);
+        }
+    }
+
+    let out = serde_json::to_string(&data).unwrap();
+    fs::write("gallery/data/heat_equation.json", out).unwrap();
+
+    let mut chart = Chart::new()
+        .title(Title::new().text("Heat equation"))
+        .x_axis3d(Axis3D::new())
+        .y_axis3d(Axis3D::new())
+        .z_axis3d(Axis3D::new())
+        .grid3d(Grid3D::new());
+
+    // Add all ODEs to plot
+    for d in data {
+        chart = chart.series(Line::new().data(d));
+    }
+
+    let renderer = HtmlRenderer::new("ODE Chart", 1200, 900);
+    let html = renderer.render(&chart).unwrap().replace("line", "line3D"); // charming does not currently have bindings for line3D
+    fs::write("gallery/interactive/heat_equation.html", html).unwrap();
+}
+
+/// Convenience function to save a [`charming::Chart`] to disk.
 fn save_chart(chart: &Chart, filename: &str, width: u32, height: u32) {
     let start = Instant::now();
     let mut renderer = HtmlRenderer::new("ODE Chart", width as u64, height as u64);

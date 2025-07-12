@@ -5,10 +5,10 @@
 
 // Notation: I am using dx/dt = f(x), where x=x(t). Numerical Recipes instead uses dy/dx = f(y), where y=y(x)
 
-use std::rc::Rc;
+use std::{f64::consts::PI, rc::Rc};
 
 use crate::{
-    methods::{AdaptiveIntegrationMethod, IntegrationMethod},
+    methods::{AdaptiveIntegrationMethod, IntegrationMethod, RungeKutta4},
     schedulers::StepsizeScheduler,
     utils::{ScalarField, Tolerances},
 };
@@ -49,13 +49,14 @@ impl System {
 
 /// A simple ODE solver. It will evaluate the `system` with a static `stepsize`
 /// using any given `IntegrationMethod`.
-pub struct Solver<M: IntegrationMethod> {
+pub struct OdeSolver<M: IntegrationMethod> {
     system: System,
     method: M,
+    // TODO: Move this as an argument of `solve`
     stepsize: f64,
 }
 
-impl<M: IntegrationMethod> Solver<M> {
+impl<M: IntegrationMethod> OdeSolver<M> {
     pub fn new(system: System, method: M, stepsize: f64) -> Self {
         Self {
             system,
@@ -91,7 +92,7 @@ impl<M: IntegrationMethod> Solver<M> {
 
 /// An ODE solver with adaptive stepsize.  It will evaluate the `system` with a variable stepsize
 /// using any given `AdaptiveIntegrationMethod` and `StepsizeScheduler`.
-pub struct AdaptiveSolver<M, S>
+pub struct OdeAdaptiveSolver<M, S>
 where
     M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
@@ -103,7 +104,7 @@ where
     to_interpolate: Option<Vec<f64>>,
 }
 
-impl<M, S> AdaptiveSolver<M, S>
+impl<M, S> OdeAdaptiveSolver<M, S>
 where
     M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
@@ -111,13 +112,13 @@ where
     const MAX_STEPS: u32 = 50_000;
 }
 
-impl<M, S> AdaptiveSolver<M, S>
+impl<M, S> OdeAdaptiveSolver<M, S>
 where
     M: AdaptiveIntegrationMethod,
     S: StepsizeScheduler,
 {
     pub fn new(system: System, method: M, scheduler: S, tolerances: Tolerances) -> Self {
-        AdaptiveSolver {
+        OdeAdaptiveSolver {
             system,
             method,
             scheduler,
@@ -222,6 +223,54 @@ where
             accepted_steps,
             rejected_steps,
         };
+    }
+}
+
+pub struct PdeSolver<M: IntegrationMethod + Clone> {
+    ode_method: M,
+    stepsize: f64,
+}
+
+impl<M: IntegrationMethod + Clone> PdeSolver<M> {
+    pub fn new(ode_method: M, stepsize: f64) -> Self {
+        PdeSolver {
+            ode_method,
+            stepsize,
+        }
+    }
+
+    pub fn solve(
+        &self,
+        t_start: f64,
+        t_end: f64,
+        x_start: f64,
+        x_end: f64,
+        grid_points: usize,
+    ) -> Vec<(f64, Vec<f64>)> {
+        let mut init_conditions = Vec::with_capacity(grid_points);
+        let mut odes: Vec<Rc<ScalarField>> = Vec::with_capacity(grid_points);
+        let dx = (x_end - x_start) / (grid_points - 1) as f64;
+        let delta_sq = dx.powi(2);
+        for i in 0..grid_points {
+            let x = x_start + dx * i as f64;
+            let ic = f64::sin(PI / 2.0 * x);
+            init_conditions.push(ic);
+
+            let ode: Rc<ScalarField> = if i == 0 {
+                Rc::new(move |_x: &[f64]| 0.0)
+            } else if i == grid_points - 1 {
+                Rc::new(move |x: &[f64]| 2.0 * (x[i - 1] - x[i]) / delta_sq)
+            } else {
+                Rc::new(move |x: &[f64]| (x[i + 1] - 2.0 * x[i] + x[i - 1]) / delta_sq)
+            };
+            odes.push(ode);
+        }
+
+        let ode_system = System::new(t_start, &init_conditions, &odes);
+        let points =
+            OdeSolver::new(ode_system, self.ode_method.clone(), self.stepsize).solve(t_end);
+
+        return points;
     }
 }
 

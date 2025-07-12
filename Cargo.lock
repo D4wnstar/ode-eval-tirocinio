@@ -1522,6 +1522,7 @@ name = "ode-eval-tirocinio"
 version = "0.1.0"
 dependencies = [
  "charming",
+ "serde_json",
 ]
 
 [[package]]
