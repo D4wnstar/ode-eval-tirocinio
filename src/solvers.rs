@@ -260,7 +260,7 @@ impl<M: IntegrationMethod + Clone> PdeSolver<M> {
     ) -> Vec<(f64, Vec<f64>)> {
         let mut init_conditions = Vec::with_capacity(grid_points);
         let mut odes: Vec<Rc<ScalarField>> = Vec::with_capacity(grid_points);
-        let dx = (x_end - x_start) / (grid_points - 1) as f64;
+        let dx = (x_end - x_start).abs() / (grid_points - 1) as f64;
 
         for i in 0..grid_points {
             // Calculate initial time conditions

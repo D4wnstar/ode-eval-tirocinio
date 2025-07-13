@@ -9,8 +9,10 @@ use charming::{
     element::{Tooltip, Trigger},
     series::{Line, Scatter},
 };
+use num::complex::Complex64;
 
 use crate::{
+    complex::{PdeSolverComplex, RungeKutta4Complex},
     methods::{AdaptiveIntegrationMethod, Euler, IntegrationMethod, Midpoint, RungeKutta4},
     schedulers::StepsizeScheduler,
     solvers::{OdeAdaptiveSolver, PdeSolver},
@@ -830,7 +832,6 @@ pub fn heat_equation() {
     let x_start = 0.0;
     let x_end = 1.0;
     let grid_points = 20;
-    let x_step = (x_end - x_start) / grid_points as f64;
 
     // Initial time condition
     let ic = Rc::new(move |x: f64| f64::sin(PI / 2.0 * x));
@@ -863,6 +864,7 @@ pub fn heat_equation() {
     //   [[t0, x2, u20], [t1, x2, u21], [t2, x2, u22], ...], // ODE 2
     //   ...
     // ]
+    let x_step = (x_end - x_start) / (grid_points - 1) as f64;
     let mut data: Vec<Vec<Vec<f64>>> = vec![Vec::new(); grid_points];
     for (t, x) in points {
         for i in 0..data.len() {
@@ -890,6 +892,106 @@ pub fn heat_equation() {
     let renderer = HtmlRenderer::new("ODE Chart", 1200, 900);
     let html = renderer.render(&chart).unwrap().replace("line", "line3D"); // charming does not currently have bindings for line3D
     fs::write("gallery/interactive/heat_equation.html", html).unwrap();
+}
+
+pub fn schrodinger_equation() {
+    let x_start = -5.0;
+    let x_end = 5.0;
+    let grid_points = 100;
+    let dx = (x_end - x_start) / (grid_points - 1) as f64;
+
+    // Initial time condition
+    let sigma: f64 = 1.0;
+    let ic = Rc::new(move |x: f64, j: usize| {
+        if j == 0 || j == grid_points - 1 {
+            // Open boundary conditions (edges are zero)
+            Complex64::ZERO
+        } else {
+            // Gaussian wave packet
+            Complex64::new(
+                // (2 / 𝛔π)^(1/4) * e^(-x^2 / 𝛔)
+                (2.0 / (sigma * PI)).powf(0.25) * f64::exp(-x.powi(2) / sigma),
+                0.0,
+            )
+        }
+    });
+
+    let ic_norm: f64 = (0..grid_points)
+        .map(|i| (ic)(x_start + dx * i as f64, i).norm_sqr() * dx)
+        .sum();
+    println!("Initial normalization: {ic_norm}");
+
+    // Spatial discretization (system of ODEs)
+    let disc = Rc::new(move |psi: &[Complex64], x_j: f64, dx: f64, j: usize| {
+        let i = Complex64::I;
+        if j == 0 || j == grid_points - 1 {
+            // Open boundary conditions (edges remain zero)
+            Complex64::ZERO
+        } else {
+            // Inner grid uses second-order central finite difference
+            i * (psi[j + 1] - 2.0 * psi[j] + psi[j - 1]) / (2.0 * dx * dx)
+                - i * x_j.powi(4) / 2.0 * psi[j]
+        }
+    });
+
+    let solution = PdeSolverComplex::new(RungeKutta4Complex::default(), 0.001, ic, disc).solve(
+        0.0,
+        6.0,
+        x_start,
+        x_end,
+        grid_points,
+    );
+
+    let probs = solution.into_square_norms();
+
+    // Write the numerical data out to JSON for plotting somewhere else
+    // since charming's support of 3D plot is not great
+    let out = serde_json::to_string(&probs).unwrap();
+    fs::write("gallery/data/schrodinger_equation.json", out).unwrap();
+
+    let mut chart = Chart::new()
+        .title(
+            Title::new()
+                .text("Schrödinger equation, V(x) = x^4 / 2 (X = time, Y = space, Z = |ψ|^2)"),
+        )
+        .x_axis3d(Axis3D::new())
+        .y_axis3d(Axis3D::new())
+        .z_axis3d(Axis3D::new())
+        .grid3d(Grid3D::new());
+
+    // Add all ODE solutions to plot
+    // chart = chart.series(Line::new().data(probs[0].clone()));
+    for p in &probs {
+        chart = chart.series(Line::new().data(p.clone()));
+    }
+
+    let renderer = HtmlRenderer::new("Schrodinger equation", 1200, 900);
+    let html = renderer.render(&chart).unwrap().replace("line", "line3D"); // charming does not currently have bindings for line3D
+    fs::write("gallery/interactive/schrodinger_equation.html", html).unwrap();
+
+    // Also plot the normalization
+    let norm: Vec<Vec<f64>> = solution
+        .points
+        .iter()
+        .map(|(t, psi)| vec![*t, psi.iter().map(|psi_j| psi_j.norm_sqr() * dx).sum()])
+        .collect();
+
+    let chart = Chart::new()
+        .title(Title::new().text("Schrödinger equation normalization"))
+        .x_axis(Axis::new().name("t"))
+        .y_axis(Axis::new().name("|ψ|^2"))
+        .grid(Grid::new())
+        .background_color("white")
+        .series(Line::new().data(norm));
+
+    let mut renderer = ImageRenderer::new(1200, 900);
+    renderer
+        .save_format(
+            ImageFormat::Png,
+            &chart,
+            "gallery/images/schrodinger_normalization.png",
+        )
+        .unwrap();
 }
 
 /// Convenience function to loop an angular coordinate between -pi and +pi in place.

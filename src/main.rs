@@ -6,10 +6,11 @@ use schedulers::DeltaScheduler;
 
 use crate::examples::{
     elastic_pendulum_comparison, harmonic_oscillator_adaptive, harmonic_oscillator_interpolation,
-    heat_equation, simple_pendulum_adaptive, simple_pendulum_against_small_swings,
-    simple_pendulum_comparison,
+    heat_equation, schrodinger_equation, simple_pendulum_adaptive,
+    simple_pendulum_against_small_swings, simple_pendulum_comparison,
 };
 
+pub mod complex;
 pub mod examples;
 pub mod methods;
 pub mod schedulers;
@@ -67,4 +68,5 @@ fn main() {
     //     DeltaScheduler::with_dimension(4),
     // );
     heat_equation();
+    schrodinger_equation();
 }
