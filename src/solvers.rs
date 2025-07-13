@@ -10,7 +10,7 @@ use std::rc::Rc;
 use crate::{
     methods::{AdaptiveIntegrationMethod, IntegrationMethod},
     schedulers::StepsizeScheduler,
-    utils::{ScalarField, Tolerances},
+    utils::{ScalarField, SolverNum, Tolerances},
 };
 
 /// An autonomous system of first-order ODEs, alongside their starting conditions
@@ -23,14 +23,14 @@ use crate::{
 /// - `derivatives` is the N-dimensional vector of all `f_i(x)` components of `f(x)`, each being an
 ///    R^N -> R scalar field.
 #[derive(Clone)]
-pub struct OdeSystem {
+pub struct OdeSystem<T: SolverNum> {
     t_start: f64,
-    x_start: Vec<f64>,
-    derivatives: Vec<Rc<ScalarField>>,
+    x_start: Vec<T>,
+    derivatives: Vec<Rc<ScalarField<T>>>,
 }
 
-impl OdeSystem {
-    pub fn new(start: f64, initial_values: &[f64], derivatives: &[Rc<ScalarField>]) -> Self {
+impl<T: SolverNum> OdeSystem<T> {
+    pub fn new(start: f64, initial_values: &[T], derivatives: &[Rc<ScalarField<T>>]) -> Self {
         if initial_values.len() != derivatives.len() {
             panic!(
                 "The number of derivative functions must be the same as the number of initial values"
@@ -49,15 +49,14 @@ impl OdeSystem {
 
 /// A simple ODE solver. It will evaluate the `system` with a static `stepsize`
 /// using any given `IntegrationMethod`.
-pub struct OdeSolver<M: IntegrationMethod> {
-    system: OdeSystem,
+pub struct OdeSolver<M: IntegrationMethod<T>, T: SolverNum> {
+    system: OdeSystem<T>,
     method: M,
-    // TODO: Move this as an argument of `solve`
     stepsize: f64,
 }
 
-impl<M: IntegrationMethod> OdeSolver<M> {
-    pub fn new(system: OdeSystem, method: M, stepsize: f64) -> Self {
+impl<M: IntegrationMethod<T>, T: SolverNum> OdeSolver<M, T> {
+    pub fn new(system: OdeSystem<T>, method: M, stepsize: f64) -> Self {
         Self {
             system,
             stepsize,
@@ -92,32 +91,32 @@ impl<M: IntegrationMethod> OdeSolver<M> {
 
 /// An ODE solver with adaptive stepsize.  It will evaluate the `system` with a variable stepsize
 /// using any given `AdaptiveIntegrationMethod` and `StepsizeScheduler`.
-pub struct OdeAdaptiveSolver<M, S>
+pub struct OdeAdaptiveSolver<M, S, T: SolverNum>
 where
-    M: AdaptiveIntegrationMethod,
-    S: StepsizeScheduler,
+    M: AdaptiveIntegrationMethod<T>,
+    S: StepsizeScheduler<T>,
 {
-    system: OdeSystem,
+    system: OdeSystem<T>,
     method: M,
     scheduler: S,
-    tolerances: Tolerances,
+    tolerances: Tolerances<f64>,
     to_interpolate: Option<Vec<f64>>,
 }
 
-impl<M, S> OdeAdaptiveSolver<M, S>
+impl<M, S, T: SolverNum> OdeAdaptiveSolver<M, S, T>
 where
-    M: AdaptiveIntegrationMethod,
-    S: StepsizeScheduler,
+    M: AdaptiveIntegrationMethod<T>,
+    S: StepsizeScheduler<T>,
 {
     const MAX_STEPS: u32 = 50_000;
 }
 
-impl<M, S> OdeAdaptiveSolver<M, S>
+impl<M, S, T: SolverNum> OdeAdaptiveSolver<M, S, T>
 where
-    M: AdaptiveIntegrationMethod,
-    S: StepsizeScheduler,
+    M: AdaptiveIntegrationMethod<T>,
+    S: StepsizeScheduler<T>,
 {
-    pub fn new(system: OdeSystem, method: M, scheduler: S, tolerances: Tolerances) -> Self {
+    pub fn new(system: OdeSystem<T>, method: M, scheduler: S, tolerances: Tolerances<f64>) -> Self {
         OdeAdaptiveSolver {
             system,
             method,
@@ -226,20 +225,19 @@ where
     }
 }
 
-pub struct PdeSolver<M: IntegrationMethod + Clone> {
+pub struct PdeSolver<M: IntegrationMethod<T> + Clone, T: SolverNum> {
     ode_method: M,
     stepsize: f64,
-    init_condition: Rc<dyn Fn(f64) -> f64>,
-    //                        state,  dx   i
-    discretization: Rc<dyn Fn(&[f64], f64, usize) -> f64>,
+    init_condition: Rc<dyn Fn(f64) -> T>,
+    discretization: Rc<dyn Fn(&[T], f64, usize) -> T>,
 }
 
-impl<M: IntegrationMethod + Clone> PdeSolver<M> {
+impl<M: IntegrationMethod<T> + Clone, T: SolverNum> PdeSolver<M, T> {
     pub fn new(
         ode_method: M,
         stepsize: f64,
-        init_condition: Rc<dyn Fn(f64) -> f64>,
-        discretization: Rc<dyn Fn(&[f64], f64, usize) -> f64>,
+        init_condition: Rc<dyn Fn(f64) -> T>,
+        discretization: Rc<dyn Fn(&[T], f64, usize) -> T>,
     ) -> Self {
         PdeSolver {
             ode_method,
@@ -257,9 +255,9 @@ impl<M: IntegrationMethod + Clone> PdeSolver<M> {
         x_start: f64,
         x_end: f64,
         grid_points: usize,
-    ) -> Vec<(f64, Vec<f64>)> {
+    ) -> Vec<(f64, Vec<T>)> {
         let mut init_conditions = Vec::with_capacity(grid_points);
-        let mut odes: Vec<Rc<ScalarField>> = Vec::with_capacity(grid_points);
+        let mut odes: Vec<Rc<ScalarField<T>>> = Vec::with_capacity(grid_points);
         let dx = (x_end - x_start) / (grid_points - 1) as f64;
 
         for i in 0..grid_points {
@@ -269,7 +267,7 @@ impl<M: IntegrationMethod + Clone> PdeSolver<M> {
 
             // Define an array of ODEs, one for each spatial grid point
             let disc = self.discretization.clone();
-            let ode = Rc::new(move |state: &[f64]| (disc)(state, dx, i));
+            let ode = Rc::new(move |state: &[T]| (disc)(state, dx, i));
             odes.push(ode);
         }
 

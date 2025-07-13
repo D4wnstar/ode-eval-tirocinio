@@ -1,36 +1,55 @@
 //! Utility code that does not quite belong to any other module in particular.
 
-/// Rust does not support vector operations, so this trait implements a few helpers to make
-/// vector algebra easier.
-pub trait VecOperations {
-    /// Run a function `map` over each index from `0` to `n - 1`.
-    fn vec(&self, n: usize, map: impl Fn(usize) -> f64) -> Vec<f64> {
-        (0..n).map(|i| map(i)).collect()
-    }
+use num::{Num, complex::Complex64};
 
-    /// Calculate the square euclidean norm of the vector.
-    fn norm_sq(&self, vec: Vec<f64>) -> f64 {
-        vec.iter().fold(0.0, |acc, num| acc + num.powi(2))
-    }
+/// Helper trait for numerical operations needed by solvers
+pub trait SolverNum: Copy + From<f64> + Num {}
 
-    /// Calculate the euclidean norm of the vector.
-    fn norm(&self, vec: Vec<f64>) -> f64 {
-        self.norm_sq(vec).sqrt()
+impl<T> SolverNum for T where T: Copy + From<f64> + Num {}
+
+/// A function from R^N to R or C^N to C.
+pub type ScalarField<T> = dyn Fn(&[T]) -> T;
+
+/// Trait for vector norm operations.
+pub trait VectorNorm<T> {
+    /// Calculate the square norm of the vector.
+    fn norm_sq(vec: &[T]) -> f64;
+
+    /// Calculate the norm of the vector.
+    fn norm(vec: &[T]) -> f64 {
+        Self::norm_sq(vec).sqrt()
     }
 }
 
-/// A function from R^N to R.
-pub type ScalarField = dyn Fn(&[f64]) -> f64;
+impl VectorNorm<f64> for f64 {
+    fn norm_sq(vec: &[f64]) -> f64 {
+        vec.iter().fold(0.0, |acc, &num| acc + num * num)
+    }
+}
+
+impl VectorNorm<Complex64> for Complex64 {
+    fn norm_sq(vec: &[Complex64]) -> f64 {
+        vec.iter().fold(0.0, |acc, num| acc + num.norm_sqr())
+    }
+}
+
+/// Trait for vector operations.
+pub trait VecOperations<T> {
+    /// Create a vector by mapping over indices.
+    fn vec(&self, n: usize, map: impl Fn(usize) -> T) -> Vec<T> {
+        (0..n).map(map).collect()
+    }
+}
 
 /// Tolerances for solvers.
 #[derive(Debug, Clone, Copy)]
-pub struct Tolerances {
-    pub absolute: f64,
-    pub relative: f64,
+pub struct Tolerances<T> {
+    pub absolute: T,
+    pub relative: T,
 }
 
-impl Tolerances {
-    pub fn new(atol: f64, rtol: f64) -> Self {
+impl<T> Tolerances<T> {
+    pub fn new(atol: T, rtol: T) -> Self {
         Self {
             absolute: atol,
             relative: rtol,

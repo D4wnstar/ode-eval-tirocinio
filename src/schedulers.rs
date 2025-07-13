@@ -5,15 +5,15 @@
 //! which largely do the same thing (adapt learning rate dynamically based on some metric
 //! during training).
 
-use crate::utils::{Tolerances, VecOperations};
+use crate::utils::{SolverNum, Tolerances, VecOperations, VectorNorm};
 
 /// Trait for stepsize schedulers. A scheduler must be able to convert an error estimate
 /// into a more tractable form, accept or reject a step and estimate the size of the next
 /// step.
-pub trait StepsizeScheduler {
+pub trait StepsizeScheduler<T: SolverNum> {
     /// Calculate the error at the current location `x_curr` using some difference metric
     /// `delta`, weighed by the given tolerances `tol`.
-    fn error(&self, x_curr: &[f64], delta: &[f64], tol: &Tolerances) -> f64;
+    fn error(&self, x_curr: &[T], delta: &[T], tol: &Tolerances<f64>) -> f64;
 
     /// Boolean function to determine whether the step should be accepted or not based on
     /// the value of the error calculated by `.error()`.
@@ -56,15 +56,16 @@ impl DeltaScheduler {
     }
 }
 
-impl VecOperations for DeltaScheduler {}
+// Implement VecOperations for DeltaScheduler with generic T
+impl<T: SolverNum> VecOperations<T> for DeltaScheduler {}
 
-impl StepsizeScheduler for DeltaScheduler {
-    fn error(&self, x_curr: &[f64], delta: &[f64], tol: &Tolerances) -> f64 {
+impl<T: SolverNum> StepsizeScheduler<T> for DeltaScheduler {
+    fn error(&self, x_curr: &[T], delta: &[T], tol: &Tolerances<f64>) -> f64 {
         let delta_over_scale = self.vec(x_curr.len(), |i| {
-            let scale_i = tol.absolute + x_curr[i].abs() * tol.relative;
-            delta[i] / scale_i
+            let scale_i = tol.absolute + VectorNorm::<T>::norm(&[x_curr[i]]) * tol.relative;
+            VectorNorm::<T>::norm(&[delta[i]]) / scale_i
         });
-        (self.one_over_dim * self.norm_sq(delta_over_scale)).sqrt()
+        (self.one_over_dim * VectorNorm::<f64>::norm_sq(&delta_over_scale)).sqrt()
     }
 
     fn accept(&self, error: f64) -> bool {
