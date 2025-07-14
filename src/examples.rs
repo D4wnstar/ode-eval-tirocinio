@@ -876,9 +876,8 @@ pub fn heat_equation() {
     // since charming's support of 3D plot is not great
     let out = serde_json::to_string(&data).unwrap();
     fs::write("gallery/data/heat_equation.json", out).unwrap();
-
     let mut chart = Chart::new()
-        .title(Title::new().text("Heat equation"))
+        .title(Title::new().text("Heat equation, (X = time, Y = space, Z = Temperature)"))
         .x_axis3d(Axis3D::new())
         .y_axis3d(Axis3D::new())
         .z_axis3d(Axis3D::new())
@@ -916,11 +915,6 @@ pub fn schrodinger_equation() {
         }
     });
 
-    let ic_norm: f64 = (0..grid_points)
-        .map(|i| (ic)(x_start + dx * i as f64, i).norm_sqr() * dx)
-        .sum();
-    println!("Initial normalization: {ic_norm}");
-
     // Spatial discretization (system of ODEs)
     let disc = Rc::new(move |psi: &[Complex64], x_j: f64, dx: f64, j: usize| {
         let i = Complex64::I;
@@ -949,47 +943,53 @@ pub fn schrodinger_equation() {
     let out = serde_json::to_string(&probs).unwrap();
     fs::write("gallery/data/schrodinger_equation.json", out).unwrap();
 
-    let mut chart = Chart::new()
-        .title(
-            Title::new()
-                .text("Schrödinger equation, V(x) = x^4 / 2 (X = time, Y = space, Z = |ψ|^2)"),
-        )
-        .x_axis3d(Axis3D::new())
-        .y_axis3d(Axis3D::new())
-        .z_axis3d(Axis3D::new())
-        .grid3d(Grid3D::new());
-
-    // Add all ODE solutions to plot
-    // chart = chart.series(Line::new().data(probs[0].clone()));
-    for p in &probs {
-        chart = chart.series(Line::new().data(p.clone()));
-    }
-
-    let renderer = HtmlRenderer::new("Schrodinger equation", 1200, 900);
-    let html = renderer.render(&chart).unwrap().replace("line", "line3D"); // charming does not currently have bindings for line3D
-    fs::write("gallery/interactive/schrodinger_equation.html", html).unwrap();
-
-    // Also plot the normalization
+    // Only plot the normalization and energy, do the actual wavefunction in Julia
     let norm: Vec<Vec<f64>> = solution
         .points
         .iter()
         .map(|(t, psi)| vec![*t, psi.iter().map(|psi_j| psi_j.norm_sqr() * dx).sum()])
         .collect();
 
+    let energy: Vec<Vec<f64>> = solution
+        .points
+        .iter()
+        .map(|(t, psi)| {
+            let mut energy = 0.0;
+            // Boundaries are always zero
+            for j in 1..(psi.len() - 1) {
+                let x_j = x_start + dx * j as f64;
+                let e = psi[j].norm_sqr() * x_j.powi(4) / 2.0 * dx
+                    - psi[j].conj() * (psi[j + 1] - 2.0 * psi[j] + psi[j - 1]) / (2.0 * dx);
+                energy += e.re
+            }
+            vec![*t, energy]
+        })
+        .collect();
+
     let chart = Chart::new()
-        .title(Title::new().text("Schrödinger equation normalization"))
-        .x_axis(Axis::new().name("t"))
-        .y_axis(Axis::new().name("|ψ|^2"))
-        .grid(Grid::new())
+        .title(Title::new().text("Schrödinger equation conservation"))
+        .grid(Grid::new().height("40%").left("5%").top("7%"))
+        .x_axis(Axis::new().name("Time"))
+        .y_axis(Axis::new().name("Normalization |ψ|^2"))
+        .grid(Grid::new().height("40%").left("5%").bottom("7%"))
+        .x_axis(Axis::new().name("Time").grid_index(1))
+        .y_axis(Axis::new().name("Energy").grid_index(1))
         .background_color("white")
-        .series(Line::new().data(norm));
+        .series(Line::new().data(norm).show_symbol(false))
+        .series(
+            Line::new()
+                .data(energy)
+                .x_axis_index(1)
+                .y_axis_index(1)
+                .show_symbol(false),
+        );
 
     let mut renderer = ImageRenderer::new(1200, 900);
     renderer
         .save_format(
             ImageFormat::Png,
             &chart,
-            "gallery/images/schrodinger_normalization.png",
+            "gallery/images/schrodinger_conservation.png",
         )
         .unwrap();
 }

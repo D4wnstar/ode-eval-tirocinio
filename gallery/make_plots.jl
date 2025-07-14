@@ -76,10 +76,14 @@ ax = Axis(
 	limits=(-5, 5, 0, 1),
 )
 lines!(f[1, 1], points)
+time_label = Observable("time = 0.0")
+text!(-4.5, 0.95, text=time_label, align=(:left, :top))
 
 frames = round(Int, length(time) / 100)
 record(f, "animations/schrodinger_time_evo.webm", 0:frames; framerate=20) do frame
-	points[] = map(ode -> ode[frame*100+1][2:3], data)
+	time_index = frame * 100 + 1
+	points[] = map(ode -> ode[time_index][2:3], data)
+	time_label[] = "time = $(round(time[time_index], digits=2))"
 end
 
 println("Done! 🎉")
