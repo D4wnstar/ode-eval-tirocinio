@@ -1,4 +1,6 @@
-These folders contain the plots created by the examples defined in `src/examples.rs`. `images` contains PNGs of the plots, whereas `interactive` contains HTML files that can be opened in a browser to interact with the data.
+These folders contain the plots created by the examples defined in `src/examples.rs`. `images` contains PNGs of the plots, whereas `interactive` contains HTML files that can be opened in a browser to interact with the data. `animations` contains videos animating some of the plots. `data` includes raw data from some examples.
+
+The `charming` Rust library, which is used to generate most of these plots, is not particularly feature complete when it comes to 3D plots, so some plots are generated in Julia using the `GLMakie` package using data exported from the Rust examples. To run the Julia file, add the `GLMakie` and `Serde` packages.
 
 Although ideally plots should be understable even without much context, the following are short explanations for each one, given in the order the examples were made in (and thus in increasing complexity).
 
