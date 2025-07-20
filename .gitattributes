@@ -1,0 +1,2 @@
+# Remove HTML files from the GitHub repo language breakdown
+*.html linguist-generated
