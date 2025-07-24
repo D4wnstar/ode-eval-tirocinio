@@ -71,22 +71,36 @@ The bottom right plot is the phase portrait of the angular part of the system. I
 
 ### Heat equation
 A simple test case for the PDE solver. It's the classic heat equation
+
 $$\frac{\partial u}{\partial t} = \frac{\partial^2 u}{\partial x^2}$$
+
 No image graph is provided for this example since `charming` lacks proper 3D graph support. An interactive version is available.
 
 ### Schrödinger equation
 The time dependent Schrödinger equation is the cornerstone of quantum mechanics. In one spatial dimension it reads
+
 $$i\hbar\frac{\partial\psi}{\partial t}=-\frac{\hbar}{2m}\frac{\partial^2\psi}{\partial x^2}+V\psi$$
+
 It can be nondimensionalized ($\hbar=m=1$) to read
+
 $$i\frac{\partial\psi}{\partial t}=-\frac{1}{2}\frac{\partial^2\psi}{\partial x^2}+V\psi$$
+
 The point is actually simulating this. It's a second order complex partial differential equation that results in the wave function $\psi$. This library uses the method of lines (MOL) to numerically evaluate PDEs by discretizing space into a grid of $m$ points $x_j$ and using finite central differences to reduce the time-and-space PDE into a system of time-only ODEs, one for each grid point. The second order finite central difference used to approximate the second derivative is
+
 $$\frac{\partial^2\psi_j}{\partial x^2}\simeq  \frac{\psi_{j+1}-2\psi_{j}+\psi_{j-1}}{\Delta x^2}$$
+
 where $j$ denotes the $j$-th grid point $x_j$, $\psi_j(t)\equiv\psi(x_j,t)$ is the wavefunction at that point and $\Delta x$ is the (constant) grid spacing. The Schrödinger equation then becomes
+
 $$i\frac{\partial\psi_j}{\partial t}=- \frac{\psi_{j+1}-2\psi_{j}+\psi_{j-1}}{2\Delta x^2}+ V_{j}\psi_j$$
+
 where $V_j\equiv V(x_j)$. This is a system of $m$ first order coupled *ordinary* differential equations for $\psi_j$ and as such, it can be solved with the usual methods for ODE system solving. In essence, we have $m$ ODEs that represent the dynamics of each individual grid point. By numerically evaluating many grid points, we can find many trajectories over time (lines, hence the name) from which we can interpolate the rest of the PDE.
 
 For this example, a quartic potential was chosen:
+
 $$V(x)=\frac{x^4}{2}$$
+
 The simulated equation is
+
 $$\frac{\partial\psi_j}{\partial t}=i\frac{\psi_{j+1}-2\psi_{j}+\psi_{j-1}}{2\Delta x^2}- i\frac{x_j^4}{2}\psi_j$$
+
 The ODE system was solved with Runge-Kutta 4, which isn't ideal for this kind of system, but with a small enough time step, it gets the job done. Since `charming` doesn't provide good 3D plot support, the data from this example is exported to the `data` folder and is then plotted in `Julia` using `GLMakie` with the `make_plots.jl` script. Three animations are provided in the `animations` folder: `schrodinger_lines.webm` shows a 3D view of the simulated lines over time, space and probability; `schrodinger_surface.webm` is the same view, but interpolating to make a solid surface instead; `schrodinger_time_evo.webm` is a 2D view of the data showing time evolution as an animation. Furthermore, an additional `schrodinger_conservation.png` plot is available in the `images` folder which shows that normalization and energy are both constant in time (and that normalization is one).
